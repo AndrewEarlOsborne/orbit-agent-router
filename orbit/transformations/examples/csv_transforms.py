@@ -1,8 +1,8 @@
-"""Example CSV transformation functions for Orbit"""
+"""Example CSV transformation functions for Orbit in the MCP Protocol"""
 
 import csv
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from pydantic import BaseModel
 
 from orbit.transformations.decorators import orbit_transformation_tool_mcp

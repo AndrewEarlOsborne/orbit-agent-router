@@ -14,6 +14,7 @@ class DataType(Enum):
     JSON = "json"
     SQL = "sql"
     PARQUET = "parquet"
+    TEXT = "text"
     CUSTOM = "custom"
 
 

@@ -29,21 +29,20 @@ dependencies = []
 [project.optional-dependencies]
 mcp = ["mcp>=1.0.0"]
 langchain = ["langchain-core>=0.1.0"]
+sql = [
+    "duckdb>=0.10.0",
+    "sqlalchemy>=2.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "mypy>=1.0.0",
-    "black>=23.0.0",
     "ruff>=0.1.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["orbit*"]
-
-[tool.black]
-line-length = 100
-target-version = ['py39']
 
 [tool.ruff]
 line-length = 100
@@ -54,8 +53,11 @@ exclude = [
     ".mypy_cache",
     ".pytest_cache",
     "claud.md",
-    ""
 ]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 
 [tool.mypy]
