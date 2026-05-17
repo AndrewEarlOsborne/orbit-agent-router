@@ -1,4 +1,4 @@
-"""Domain-specific Launchpad subclasses"""
+"""Domain-specific Launchpad subclasses with custom shuttle summarization logic."""
 
 from orbit.launchpads.duckdb_launchpad import DuckDBLaunchpad, DuckDBResultDescriptor
 

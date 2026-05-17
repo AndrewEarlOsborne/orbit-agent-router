@@ -16,13 +16,13 @@ from orbit.protocols import (
     DataContent,
     ResourceContent,
 )
-from orbit.wrappers.mcp_wrapper import (
-    wrap_mcp_tool,
+from orbit.shuttles.mcp_shuttle import (
+    launch_mcp_shuttle,
     MCPClientInterceptor,
     intercept_mcp_session,
 )
-from orbit.wrappers.langchain_wrapper import (
-    wrap_langchain_tool,
+from orbit.shuttles.langchain_shuttle import (
+    launch_langchain_shuttle,
     LangChainToolNodeInterceptor,
     intercept_tool_node,
 )
@@ -50,12 +50,12 @@ __all__ = [
     "TextContent",
     "DataContent",
     "ResourceContent",
-    # MCP wrappers
-    "wrap_mcp_tool",
+    # MCP shuttles
+    "launch_mcp_shuttle",
     "MCPClientInterceptor",
     "intercept_mcp_session",
-    # LangChain wrappers
-    "wrap_langchain_tool",
+    # LangChain shuttles
+    "launch_langchain_shuttle",
     "LangChainToolNodeInterceptor",
     "intercept_tool_node",
     # Transformations framework

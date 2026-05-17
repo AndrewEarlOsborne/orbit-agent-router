@@ -17,25 +17,23 @@ Orbit is a lightweight, python-native solution that can leverage a local cache o
 ## Core Concepts
 
 ### Terminology
-- **Payload/Artifact**: Synonymous terms describing the non-metadata data returned from an LLM agent's tool call
-- **Launchpad**: Configurable wrapper that intercepts tool execution and manages payload handling
-- **Station**: Storage backend (cache or database) for full payloads
-- **Orbit Tool**: A tool wrapped by a Launchpad to enable payload interception and masking
+- **Payload/Artifact**: Synonymous terms describing the full data dump returned from an LLM agent's tool call
+- **Launchpad**: Configurable component on the agent's surface that launches tools as shuttles, intercepting their payloads. Custom Launchpads implement domain-specific summarization logic.
+- **Shuttle**: A tool launched by a Launchpad. Shuttles have identical interfaces to the original tools but intercept results — ferrying full payloads to a Station and returning a manifest to the LLM.
+- **Station**: Storage backend (cache or database) where full payloads dock after interception
+- **Manifest**: The summarized/masked version of a payload returned to the LLM
 
 ## Local Cache Quickstart
 1. Import Orbit
 ```{python}
 from orbit import StationCache, Launchpad
 ```
-2. Make an async orbit cache
-```{python}
-station = StationCache(my_cache)
-```
+2. Make an async orbit cache. A number of cache types like redis or file stores for mcp are supported
  
-3. Attach an orbit Launchpad to tool calls in your client (Like an MCP client or langgraph toolnode)
+3. Attach an orbit Launchpad to tool calls in your client (like an MCP client or langgraph toolnode)
 
 ### MCP Client
-Wrap the tools on discovery
+Launch tools as shuttles on discovery
 ```{python}
 async def connect_to_server(self, server_script_path: str):
     """Connect to an MCP server
@@ -59,7 +57,7 @@ async def connect_to_server(self, server_script_path: str):
     response = await self.session.list_tools()
     tools = response.tools
 
-    # Wrap tools as orbit tools
+    # Launch tools as orbit shuttles
     default_launchpad = Launchpad()
     orbit_tools = []
 
@@ -92,13 +90,13 @@ async def process_query(self, query: str) -> str:
     )
 ```
 
-Orbit intercepts all data artifacts from MCP tools for the MCP Client type, '
+Orbit intercepts all data artifacts from MCP tools for the MCP Client type.
 
 <Reference: https://modelcontextprotocol.io/docs/develop/build-client>
 
 
 ### For LangChain Toolnode
-1. Wrap existing tools using launchpad's stage functionality
+1. Launch existing tools as shuttles via the Launchpad
 ```{python}
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
@@ -109,29 +107,17 @@ def multiply(a: int, b: int) -> int:
     """Multiply two numbers."""
     return a * b
 
-# Wrap tools as orbit tools
+# Launch tools as orbit shuttles
 default_launchpad = Launchpad()
 orbit_tools = []
 
 for tool in tools:
     orbit_tools.append(default_launchpad.stage(tool))
 
-tool_node = ToolNode(tool_node_tools)
+tool_node = ToolNode(orbit_tools)
 ```
 
-2. Declare tools as orbit tools
-
-```{python}
-from langgraph.prebuilt import ToolNode
-from langchain_core.tools import tool
-
-@tool
-def multiply(a: int, b: int) -> int:
-    """Multiply two numbers."""
-    return a * b
-```
-
-<Reference: https://langchain-ai.github.io/langgraph/how-tos/tool-calling/?_gl=1*15yvv83*_ga*MTYwMjY4NzI0NS4xNzU5MDEzNTIw*_ga_47WX3HKKY2*czE3NTkwMTM1MjAkbzEkZzAkdDE3NTkwMTM1MjAkajYwJGwwJGgw>
+<Reference: https://langchain-ai.github.io/langgraph/how-tos/tool-calling/>
 
 
 ## Database-enabled Quickstart
@@ -142,7 +128,7 @@ This solution leverages a live database connection to handle enterprise and prod
 from orbit import StationDB 
 ```
 
-2. Make an async orbit cache
+2. Make an async orbit station
 ```{python}
 station = StationDB()
 ```
@@ -156,22 +142,22 @@ station.get_payload()
 
 ### How Launchpads Work
 
-Launchpads wrap tools to intercept their execution flow. The wrapping process modifies runtime behavior without changing tool semantics or functionality.
+A Launchpad sits on the agent's surface and launches tools as shuttles. Shuttles intercept the execution flow of their wrapped tools — full payloads dock at the Station, and a manifest is returned to the LLM.
 
 **Execution Flow:**
 1. Tool is called with arguments
 2. Tool executes normally and returns result
-3. **Interception Point**: Launchpad intercepts the result
+3. **Interception Point**: Shuttle intercepts the result on its way back to the agent
 4. Result validation: Check if result is a valid tool message
-5. Payload storage: Full result (including result.content) is copied and saved to Station with tool_call_id as key
-6. Summary generation: `_generate_summary()` is called to create a masked/summarized version
-7. Modified result with summary is returned to agent
+5. Payload storage: Full result (including result.content) is copied and docked at the Station with tool_call_id as key
+6. Manifest generation: `_generate_summary()` is called to create a masked/summarized manifest
+7. Modified result with manifest is returned to the agent
 
 ### Default Launchpad
 
-The default Launchpad operates on tool response objects and implements automatic masking for large content.
+The default Launchpad implements automatic masking for large content.
 
-**Default Summary Generation Logic:**
+**Default Manifest Generation Logic:**
 - Iterates over each key-value pair in result.content (which is a list[dict] in MCP)
 - For MCP tools, each dict has a "type" key with fields according to that type (e.g., "text", "data", "resource")
 - For each content item:
@@ -180,14 +166,14 @@ The default Launchpad operates on tool response objects and implements automatic
   - Short values (under 2048 chars) pass through unchanged
 - Keys are assumed to be unique identifiers and are preserved
 
-**Type-Aware Wrapping:**
-- Launchpad.stage() accepts different tool types (MCP tools, LangChain tools, etc.)
-- Internal type detection switches to appropriate wrapping logic
+**Type-Aware Shuttle Launching:**
+- `Launchpad.stage()` accepts different tool types (MCP tools, LangChain tools, etc.)
+- Internal type detection switches to the appropriate shuttle class
 - Each tool type requires different interception mechanisms but produces consistent behavior
 
 ### Custom Launchpad
 
-Custom Launchpads extend the base Launchpad class to implement domain-specific summarization logic.
+Custom Launchpads extend the base Launchpad class to implement domain-specific manifest generation.
 
 **Example: Weather Alert MCP Tool**
 ```python
@@ -201,7 +187,7 @@ class WeatherLaunchpad(Launchpad):
         tool_name: str,
         content: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Custom summary for weather MCP tool that extracts alert counts"""
+        """Custom manifest for weather MCP tool that extracts alert counts"""
 
         summary_content = []
 
@@ -233,7 +219,7 @@ from orbit import StationCache
 station = StationCache()
 weather_launchpad = WeatherLaunchpad(station=station)
 
-# Wrap tools
+# Launch tools as shuttles
 for tool in mcp_tools:
     orbit_tools.append(weather_launchpad.stage(tool))
 ```
@@ -250,12 +236,13 @@ Orbit enables Agentic systems to retry incorrect tool calls by dynamically retur
 orbit/
 ├── __init__.py
 ├── launchpad.py       # Base Launchpad class and default implementation
+├── launchpads/        # Domain-specific Launchpad subclasses
+│   └── duckdb_launchpad.py
 ├── station.py         # StationCache and StationDB classes
-├── wrappers/
-│   ├── __init__.py
-│   ├── mcp.py        # MCP-specific tool wrapping logic
-│   └── langchain.py  # LangChain-specific tool wrapping logic
-└── types.py          # Type definitions and protocols
+├── shuttles/          # Shuttle classes per agent framework
+│   ├── mcp_shuttle.py
+│   └── langchain_shuttle.py
+└── protocols.py       # Type definitions and protocols
 ```
 
 ### Type Safety
@@ -263,10 +250,10 @@ All public APIs use type hints for parameters and return values. Custom Launchpa
 
 ## Future Work
 1. Investigate pydantic framework handling
-   1. Investigate adding pythonic agent framework in addtion to langchain, MCP
+   1. Investigate adding pythonic agent framework in addition to langchain, MCP
    2. Investigate pydantic baseclass handling as configs for client-side interaction, ie with classes
       1. Ensure LLM format constraining is maintained when using the module
-2. Add summary creation functions for common use-case tools (primarily MCP) to be levered correctly by default.
+2. Add manifest creation functions for common use-case tools (primarily MCP) to be leveraged correctly by default.
    1. Database MCPs (Common and have standardized MCPs)
 3. Investigate buffering logic when working with Larger Than Memory data results
    1. Lever Blockchain scraper

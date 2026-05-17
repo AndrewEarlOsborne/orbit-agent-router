@@ -1,4 +1,4 @@
-"""MCP tool wrapping functionality"""
+"""MCP shuttle and session interception functionality"""
 
 from typing import TYPE_CHECKING, Any, Dict
 import logging
@@ -10,16 +10,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class MCPToolWrapper:
-    """Wrapper for MCP tools that intercepts results"""
+class MCPShuttle:
+    """Shuttle for MCP tools that intercepts results and ferries payloads to the station"""
 
     def __init__(self, original_tool: Any, launchpad: "Launchpad") -> None:
         """
-        Initialize MCP tool wrapper
+        Initialize MCP shuttle
 
         Args:
             original_tool: Original MCP tool object
-            launchpad: Launchpad instance for interception
+            launchpad: Launchpad instance that launched this shuttle
         """
         self._original_tool = original_tool
         self._launchpad = launchpad
@@ -27,7 +27,7 @@ class MCPToolWrapper:
         self.name = original_tool.name
         self.description = original_tool.description
         self.inputSchema = original_tool.inputSchema
-        logger.debug("Created MCPToolWrapper for tool: %s", self.name)
+        logger.debug("Created MCPShuttle for tool: %s", self.name)
 
     async def __call__(self, **kwargs: Any) -> Any:
         """
@@ -40,7 +40,7 @@ class MCPToolWrapper:
             Intercepted and summarized result
         """
         tool_call_id = str(uuid.uuid4())
-        logger.debug("Executing MCP tool '%s' with tool_call_id: %s", self.name, tool_call_id)
+        logger.debug("Executing MCP shuttle '%s' with tool_call_id: %s", self.name, tool_call_id)
 
         if hasattr(self._original_tool, "__call__"):
             result = await self._original_tool(**kwargs)
@@ -52,29 +52,30 @@ class MCPToolWrapper:
         return intercepted_result
 
 
-def wrap_mcp_tool(tool: Any, launchpad: "Launchpad") -> Any:
+def launch_mcp_shuttle(tool: Any, launchpad: "Launchpad") -> Any:
     """
-    Wrap an MCP tool to intercept result at call_tool invocation
+    Launch an MCP tool as a shuttle, intercepting results before they reach the agent
 
-    The interception occurs after the tool execution, before returning
-    the result to the agent.
+    The interception occurs after tool execution, before returning
+    the result to the agent. The full payload is stored at the station;
+    a manifest is returned to the LLM.
 
     Args:
-        tool: MCP tool object to wrap
-        launchpad: Launchpad instance for interception
+        tool: MCP tool object to wrap as a shuttle
+        launchpad: Launchpad instance that will manage interception
 
     Returns:
-        Wrapped MCP tool
+        MCPShuttle wrapping the original tool
     """
-    return MCPToolWrapper(tool, launchpad)
+    return MCPShuttle(tool, launchpad)
 
 
 class MCPClientInterceptor:
     """
-    Interceptor that can be used to wrap MCP client session calls
+    Session-level interceptor for MCP clients
 
-    This class provides a way to intercept calls at the session level,
-    wrapping the session.call_tool method directly.
+    Intercepts calls at the session.call_tool level rather than
+    wrapping individual tools as shuttles.
     """
 
     def __init__(self, session: Any, launchpad: "Launchpad") -> None:
@@ -99,7 +100,7 @@ class MCPClientInterceptor:
             tool_args: Arguments for the tool
 
         Returns:
-            Intercepted result
+            Intercepted result with payload stored at station
         """
         tool_call_id = str(uuid.uuid4())
         logger.debug(
@@ -222,7 +223,6 @@ class MCPClientInterceptor:
                         return intercepted_result
 
                 except ImportError:
-                    # mcp package unavailable; caller gets the dict form
                     logger.debug("mcp package not available; returning intercepted dict result")
                 except Exception as exc:
                     logger.warning(
@@ -245,10 +245,10 @@ class MCPClientInterceptor:
 
 def intercept_mcp_session(session: Any, launchpad: "Launchpad") -> MCPClientInterceptor:
     """
-    Create and enable a session-level interceptor for MCP client
+    Create and enable a session-level interceptor for an MCP client
 
-    This is an alternative to wrapping individual tools. It intercepts
-    at the session.call_tool level.
+    An alternative to launching individual tool shuttles — intercepts at the
+    session.call_tool level so all tools are covered automatically.
 
     Args:
         session: MCP client session object
@@ -260,7 +260,7 @@ def intercept_mcp_session(session: Any, launchpad: "Launchpad") -> MCPClientInte
     Example:
         ```python
         from orbit import Launchpad, StationCache
-        from orbit.wrappers.mcp import intercept_mcp_session
+        from orbit.shuttles.mcp_shuttle import intercept_mcp_session
 
         launchpad = Launchpad(StationCache())
         interceptor = intercept_mcp_session(client.session, launchpad)

@@ -1,4 +1,4 @@
-"""Launchpad classes for intercepting and summarizing tool payloads"""
+"""Launchpad classes for launching shuttles and summarizing tool payloads"""
 
 from typing import Any, Dict, List, Union
 from abc import ABC, abstractmethod
@@ -27,27 +27,31 @@ class Launchpad(ABC):
 
     def stage(self, tool: ToolProtocol) -> ToolProtocol:
         """
-        Wrap a tool to enable payload interception
+        Launch a tool as a shuttle, enabling payload interception
+
+        The launched shuttle has an identical interface to the original tool
+        but intercepts results: full payloads are stored at the station and
+        a summarized manifest is returned to the agent.
 
         Args:
             tool: Tool object (MCP tool, LangChain tool, etc.)
 
         Returns:
-            Wrapped tool with identical signature but modified execution behavior
+            Shuttle wrapping the original tool
 
         Raises:
             TypeError: If tool type is not supported
         """
         if isinstance(tool, MCPToolProtocol):
-            logger.debug("Staging MCP tool: %s", tool.name)
-            from orbit.wrappers.mcp_wrapper import wrap_mcp_tool
+            logger.debug("Launching MCP shuttle for tool: %s", tool.name)
+            from orbit.shuttles.mcp_shuttle import launch_mcp_shuttle
 
-            return wrap_mcp_tool(tool, self)
+            return launch_mcp_shuttle(tool, self)
         elif isinstance(tool, LangChainToolProtocol):
-            logger.debug("Staging LangChain tool: %s", tool.name)
-            from orbit.wrappers.langchain_wrapper import wrap_langchain_tool
+            logger.debug("Launching LangChain shuttle for tool: %s", tool.name)
+            from orbit.shuttles.langchain_shuttle import launch_langchain_shuttle
 
-            return wrap_langchain_tool(tool, self)
+            return launch_langchain_shuttle(tool, self)
         else:
             raise TypeError(
                 f"Unsupported tool type: {type(tool)}. "

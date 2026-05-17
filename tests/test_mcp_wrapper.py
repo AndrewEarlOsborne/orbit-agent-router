@@ -1,9 +1,9 @@
-"""Test suite for MCP tool wrapping functionality"""
+"""Test suite for MCP shuttle functionality"""
 
 import pytest
 from typing import Any, Dict, List
 from orbit import DefaultLaunchpad, StationCache
-from orbit.wrappers.mcp_wrapper import MCPToolWrapper, MCPClientInterceptor
+from orbit.shuttles.mcp_shuttle import MCPShuttle, MCPClientInterceptor
 from mcp.types import CallToolResult, TextContent
 
 
@@ -42,12 +42,12 @@ class MockMCPSession:
         return CallToolResult(content=content_objects)
 
 
-class TestMCPToolWrapper:
-    """Test MCP tool wrapping"""
+class TestMCPShuttle:
+    """Test MCP shuttle behavior"""
 
     @pytest.mark.asyncio
-    async def test_wrapper_preserves_tool_metadata(self) -> None:
-        """Test that wrapper preserves tool name, description, and schema"""
+    async def test_shuttle_preserves_tool_metadata(self) -> None:
+        """Test that shuttle preserves tool name, description, and schema"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station)
 
@@ -57,15 +57,15 @@ class TestMCPToolWrapper:
             result_content=[{"type": "text", "text": "short result"}],
         )
 
-        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
+        shuttle = MCPShuttle(original_tool, launchpad)
 
-        assert wrapped_tool.name == "test_tool"
-        assert wrapped_tool.description == "A test tool"
-        assert wrapped_tool.inputSchema == {"type": "object", "properties": {}}
+        assert shuttle.name == "test_tool"
+        assert shuttle.description == "A test tool"
+        assert shuttle.inputSchema == {"type": "object", "properties": {}}
 
     @pytest.mark.asyncio
-    async def test_wrapper_stores_full_payload(self) -> None:
-        """Test that wrapper stores full payload in cache"""
+    async def test_shuttle_stores_full_payload(self) -> None:
+        """Test that shuttle stores full payload at the station"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station)
 
@@ -74,11 +74,11 @@ class TestMCPToolWrapper:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
-        result = await wrapped_tool(arg="value")
+        shuttle = MCPShuttle(original_tool, launchpad)
+        result = await shuttle(arg="value")
         assert result["content"][0]["text"] == "test result"
 
-        # Cache should have one entry
+        # Station should have one docked payload
         assert len(station._cache) > 0
 
         # Get the stored payload
@@ -88,8 +88,8 @@ class TestMCPToolWrapper:
         assert stored_payload == {"content": result_content}
 
     @pytest.mark.asyncio
-    async def test_wrapper_masks_long_content(self) -> None:
-        """Test that wrapper masks content exceeding threshold"""
+    async def test_shuttle_masks_long_content(self) -> None:
+        """Test that shuttle masks content exceeding threshold"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station, threshold=100)
 
@@ -102,8 +102,8 @@ class TestMCPToolWrapper:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
-        result = await wrapped_tool(arg="value")
+        shuttle = MCPShuttle(original_tool, launchpad)
+        result = await shuttle(arg="value")
 
         # Result should be masked
         assert result["content"][0]["type"] == "text"
@@ -113,8 +113,8 @@ class TestMCPToolWrapper:
         assert "summary" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_wrapper_preserves_short_content(self) -> None:
-        """Test that wrapper preserves content under threshold"""
+    async def test_shuttle_preserves_short_content(self) -> None:
+        """Test that shuttle preserves content under threshold"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station, threshold=100)
 
@@ -125,16 +125,16 @@ class TestMCPToolWrapper:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
-        result = await wrapped_tool(arg="value")
+        shuttle = MCPShuttle(original_tool, launchpad)
+        result = await shuttle(arg="value")
 
         # Result should not be masked
         assert result["content"][0]["type"] == "text"
         assert result["content"][0]["text"] == short_text
 
     @pytest.mark.asyncio
-    async def test_wrapper_handles_multiple_content_items(self) -> None:
-        """Test that wrapper handles multiple content items"""
+    async def test_shuttle_handles_multiple_content_items(self) -> None:
+        """Test that shuttle handles multiple content items"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station, threshold=50)
 
@@ -150,8 +150,8 @@ class TestMCPToolWrapper:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
-        result = await wrapped_tool(arg="value")
+        shuttle = MCPShuttle(original_tool, launchpad)
+        result = await shuttle(arg="value")
 
         # First item should not be masked
         assert result["content"][0]["text"] == "short"
@@ -202,7 +202,7 @@ class TestMCPClientInterceptor:
 
     @pytest.mark.asyncio
     async def test_session_interceptor_stores_payload(self) -> None:
-        """Test that session interceptor stores full payload"""
+        """Test that session interceptor docks full payload at station"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station)
 
@@ -216,7 +216,7 @@ class TestMCPClientInterceptor:
 
         assert result.content[0].text == "result"
 
-        # Cache should have one entry
+        # Station should have one docked payload
         assert station._cache is not None
         assert len(station._cache.keys()) == 1
 

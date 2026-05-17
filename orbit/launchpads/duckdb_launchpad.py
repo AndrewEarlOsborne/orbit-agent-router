@@ -11,7 +11,7 @@ Usage with fastmcp (minimal pattern):
     async def my_tool(query: str) -> list[dict]:
         ...
 
-    staged_tool = launchpad.stage(my_tool)
+    shuttle = launchpad.stage(my_tool)
 """
 
 import json
@@ -41,7 +41,7 @@ class DuckDBLaunchpad(Launchpad):
     """
     Launchpad that materializes structured tool results to local DuckDB files.
 
-    Any tool wrapped via stage() has its output intercepted: if the result
+    Any tool launched as a shuttle via stage() has its output intercepted: if the result
     content contains parseable tabular data (JSON array of objects, arrays, or
     scalars), it is written to a .duckdb file keyed by tool_call_id.  The LLM
     receives a compact summary (schema + row count + preview) instead of the
