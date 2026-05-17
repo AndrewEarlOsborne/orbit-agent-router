@@ -1,5 +1,5 @@
 """Domain-specific Launchpad subclasses"""
 
-from orbit.launchpads.sql_launchpad import SQLLaunchpad, SQLResultDescriptor
+from orbit.launchpads.duckdb_launchpad import DuckDBLaunchpad, DuckDBResultDescriptor
 
-__all__ = ["SQLLaunchpad", "SQLResultDescriptor"]
+__all__ = ["DuckDBLaunchpad", "DuckDBResultDescriptor"]

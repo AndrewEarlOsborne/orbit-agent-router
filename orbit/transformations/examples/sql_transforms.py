@@ -1,13 +1,11 @@
-"""SQL transformation tools for Orbit, backed by DuckDB.
+"""Example SQL transformation functions for Orbit, backed by DuckDB.
 
-These tools operate on .duckdb files produced by SQLLaunchpad after intercepting
-LangChain SQLDatabaseToolkit query results.
+These tools operate on .duckdb files produced by DuckDBLaunchpad.  The pattern
+mirrors csv_transforms.py: each function receives resource_uri (the source
+.duckdb file), applies a transform, and writes to either the same file
+(in_place=True) or a new sibling file.
 
 Requires: pip install orbit[sql]
-
-Each tool receives resource_uri pointing to a .duckdb file that contains:
-  result              — the materialized query rows
-  _orbit_descriptor   — metadata (source_connection, column_names, row_count, …)
 """
 
 import json
@@ -23,33 +21,12 @@ from orbit.transformations.decorators import orbit_transformation_tool_mcp
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------------------------------------------
-# Config models
-# ------------------------------------------------------------------
-
-
-class SQLFilterConfig(BaseModel):
-    where_clause: str
-
-
-class SQLAggregateConfig(BaseModel):
-    group_cols: List[str]
-    agg_col: str
-    agg_func: str  # sum | avg | count | min | max
-
-
-class SQLExportConfig(BaseModel):
-    format: str = "csv"  # csv | parquet
-    output_path: Optional[str] = None
-
-
-class SQLReconnectConfig(BaseModel):
-    query: str  # new query to execute against source DB
-
-
-# ------------------------------------------------------------------
-# Internal helpers
-# ------------------------------------------------------------------
+def _sql_output_path(resource_uri: str, transform_name: str, in_place: bool) -> str:
+    """Compute destination path: same file for in-place, new sibling .duckdb otherwise."""
+    if in_place:
+        return resource_uri
+    base, _ = os.path.splitext(resource_uri)
+    return f"{base}.{transform_name}.duckdb"
 
 
 def _require_duckdb() -> Any:
@@ -63,13 +40,8 @@ def _require_duckdb() -> Any:
         )
 
 
-def _output_path(resource_uri: str, suffix: str) -> str:
-    base, _ = os.path.splitext(resource_uri)
-    return f"{base}.{suffix}.duckdb"
-
-
 def _copy_descriptor(src_path: str, dst_path: str, overrides: Dict[str, str]) -> None:
-    """Copy _orbit_descriptor from src to dst, applying overrides."""
+    """Attach both DuckDB files and copy _orbit_descriptor, applying key overrides."""
     duckdb = _require_duckdb()
     con = duckdb.connect()
     con.execute(f"ATTACH '{src_path}' AS src (READ_ONLY)")
@@ -93,13 +65,28 @@ def _read_descriptor(resource_uri: str) -> Dict[str, str]:
         con.close()
 
 
-def _row_count(resource_uri: str) -> int:
-    duckdb = _require_duckdb()
-    con = duckdb.connect(resource_uri, read_only=True)
-    try:
-        return con.execute("SELECT COUNT(*) FROM result").fetchone()[0]
-    finally:
-        con.close()
+# ------------------------------------------------------------------
+# Config models
+# ------------------------------------------------------------------
+
+
+class SQLFilterConfig(BaseModel):
+    where_clause: str
+
+
+class SQLAggregateConfig(BaseModel):
+    group_cols: List[str]
+    agg_col: str
+    agg_func: str  # sum | avg | count | min | max
+
+
+class SQLExportConfig(BaseModel):
+    format: str = "csv"  # csv | parquet
+    output_path: Optional[str] = None
+
+
+class SQLReconnectConfig(BaseModel):
+    query: str  # SQL query to execute against source DB
 
 
 # ------------------------------------------------------------------
@@ -121,19 +108,23 @@ async def filter_sql(
     Filter the materialized result table using a WHERE clause.
 
     Args:
-        resource_uri: Path to .duckdb file produced by SQLLaunchpad.
-        where_clause: SQL WHERE expression, e.g. "revenue > 1000 AND region = 'US'"
-        in_place: If True, replace the result table in-place.
-                  If False, write a new .duckdb file.
+        resource_uri: Path to .duckdb file produced by DuckDBLaunchpad (source).
+        where_clause: SQL WHERE expression, e.g. "revenue > 1000 AND region = 'US'".
+        in_place:     If True, replace result table in-place.
+                      If False, write a new sibling .duckdb file.
 
     Returns:
         Summary with filtered row count and output resource URI.
     """
     try:
         duckdb = _require_duckdb()
-        total = _row_count(resource_uri)
+        out_path = _sql_output_path(resource_uri, "filter_sql", in_place)
 
-        out_path = resource_uri if in_place else _output_path(resource_uri, "filter")
+        total = (
+            duckdb.connect(resource_uri, read_only=True)
+            .execute("SELECT COUNT(*) FROM result")
+            .fetchone()[0]
+        )  # type: ignore[index]
 
         if in_place:
             con = duckdb.connect(resource_uri)
@@ -141,7 +132,7 @@ async def filter_sql(
                 con.execute(f"CREATE TEMP TABLE _tmp AS SELECT * FROM result WHERE {where_clause}")
                 con.execute("DELETE FROM result")
                 con.execute("INSERT INTO result SELECT * FROM _tmp")
-                filtered_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]
+                filtered_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]  # type: ignore[index]
             finally:
                 con.close()
         else:
@@ -152,7 +143,7 @@ async def filter_sql(
                 con.execute(
                     f"CREATE TABLE dst.result AS SELECT * FROM src.result WHERE {where_clause}"
                 )
-                filtered_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]
+                filtered_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]  # type: ignore[index]
             finally:
                 con.close()
             _copy_descriptor(resource_uri, out_path, {"row_count": str(filtered_count)})
@@ -161,8 +152,8 @@ async def filter_sql(
         return {
             "type": "text",
             "text": (
-                f"Filtered result: {filtered_count} of {total} rows match WHERE {where_clause}.\n"
-                f"Resource URI: {out_path}"
+                f"Filtered result: {filtered_count} of {total} rows match WHERE {where_clause}. "
+                f"Output: {out_path}"
             ),
         }
     except Exception as e:
@@ -186,11 +177,12 @@ async def aggregate_sql(
     Apply a GROUP BY aggregation to the materialized result table.
 
     Args:
-        resource_uri: Path to .duckdb file produced by SQLLaunchpad.
+        resource_uri: Path to .duckdb file produced by DuckDBLaunchpad (source).
         group_cols:   Columns to group by.
         agg_col:      Column to aggregate.
         agg_func:     Aggregation function: sum | avg | count | min | max.
-        in_place:     Replace result table in-place or write a new file.
+        in_place:     If True, replace result table in-place.
+                      If False, write a new sibling .duckdb file.
 
     Returns:
         Summary with group count and output resource URI.
@@ -208,17 +200,18 @@ async def aggregate_sql(
         group_expr = ", ".join(f'"{c}"' for c in group_cols)
         agg_alias = f"{agg_func}_{agg_col}"
         select_expr = f'{group_expr}, {agg_func}("{agg_col}") AS "{agg_alias}"'
-        query = f"SELECT {select_expr} FROM result GROUP BY {group_expr}"
-
-        out_path = resource_uri if in_place else _output_path(resource_uri, f"agg_{agg_func}")
+        out_path = _sql_output_path(resource_uri, "aggregate_sql", in_place)
 
         if in_place:
             con = duckdb.connect(resource_uri)
             try:
-                con.execute(f"CREATE TEMP TABLE _tmp AS {query}")
+                con.execute(
+                    f"CREATE TEMP TABLE _tmp AS "
+                    f"SELECT {select_expr} FROM result GROUP BY {group_expr}"
+                )
                 con.execute("DROP TABLE result")
                 con.execute("CREATE TABLE result AS SELECT * FROM _tmp")
-                group_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]
+                group_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]  # type: ignore[index]
             finally:
                 con.close()
         else:
@@ -227,9 +220,10 @@ async def aggregate_sql(
                 con.execute(f"ATTACH '{resource_uri}' AS src (READ_ONLY)")
                 con.execute(f"ATTACH '{out_path}' AS dst")
                 con.execute(
-                    f"CREATE TABLE dst.result AS {query.replace('FROM result', 'FROM src.result')}"
+                    f"CREATE TABLE dst.result AS "
+                    f"SELECT {select_expr} FROM src.result GROUP BY {group_expr}"
                 )
-                group_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]
+                group_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]  # type: ignore[index]
             finally:
                 con.close()
             new_cols = json.dumps(group_cols + [agg_alias])
@@ -240,18 +234,14 @@ async def aggregate_sql(
             )
 
         logger.info(
-            "aggregate_sql: %d groups, %s(%s) grouped by %s",
-            group_count,
-            agg_func,
-            agg_col,
-            group_cols,
+            "aggregate_sql: %d groups, %s(%s) by %s", group_count, agg_func, agg_col, group_cols
         )
         return {
             "type": "text",
             "text": (
-                f"Aggregated result: {group_count} groups.\n"
-                f"{agg_func}({agg_col}) grouped by {group_cols}.\n"
-                f"Resource URI: {out_path}"
+                f"Aggregated result: {group_count} groups. "
+                f"{agg_func}({agg_col}) grouped by {group_cols}. "
+                f"Output: {out_path}"
             ),
         }
     except Exception as e:
@@ -274,10 +264,10 @@ async def export_sql(
     Export the materialized result table to CSV or Parquet.
 
     Args:
-        resource_uri: Path to .duckdb file produced by SQLLaunchpad.
+        resource_uri: Path to .duckdb file produced by DuckDBLaunchpad (source).
         format:       Output format: "csv" or "parquet".
         output_path:  Destination file path. Defaults to resource_uri with new extension.
-        in_place:     Ignored (export always creates a new file).
+        in_place:     Ignored — export always writes a new file.
 
     Returns:
         Summary with output file path and row count.
@@ -298,12 +288,12 @@ async def export_sql(
 
         con = duckdb.connect(resource_uri, read_only=True)
         try:
-            row_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]
+            row_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]  # type: ignore[index]
             con.execute(f"COPY result TO '{output_path}' (FORMAT {duckdb_format}{header_opt})")
         finally:
             con.close()
 
-        logger.info("export_sql: %d rows exported to %s (%s)", row_count, output_path, format)
+        logger.info("export_sql: %d rows -> %s (%s)", row_count, output_path, format)
         return {
             "type": "text",
             "text": f"Exported {row_count} rows to {format.upper()}: {output_path}",
@@ -315,7 +305,9 @@ async def export_sql(
 
 @orbit_transformation_tool_mcp(
     data_type=DataType.SQL,
-    description="Re-execute a SQL query against the original source database and materialize the new result",
+    description=(
+        "Re-execute a SQL query against the original source database and materialize the new result"
+    ),
     transform_config=SQLReconnectConfig,
 )
 async def reconnect_and_query(
@@ -326,22 +318,23 @@ async def reconnect_and_query(
     """
     Re-run (or run a new) SQL query against the source database recorded in the descriptor.
 
-    Reads the source_connection string stored in _orbit_descriptor, executes the given
-    query via SQLAlchemy, and writes the result to a new (or the same) .duckdb file.
+    Reads source_connection from _orbit_descriptor, executes the given query via
+    SQLAlchemy, and materializes the result to a new (or the same) .duckdb file.
 
     Args:
         resource_uri: Path to .duckdb file whose descriptor contains source_connection.
-        query:        SQL query to execute against the source database.
-        in_place:     Replace result table in-place or write a new file.
+        query:        SQL query to run against the source database.
+        in_place:     If True, replace result table in-place.
+                      If False, write a new sibling .duckdb file.
 
     Returns:
         Summary with new row count and output resource URI.
 
     Requires:
-        pip install orbit[sql] sqlalchemy <db-driver>
+        pip install orbit[sql] <db-driver>
     """
     try:
-        import sqlalchemy  # noqa: F401
+        import sqlalchemy as sa
     except ImportError:
         return {
             "type": "text",
@@ -357,44 +350,33 @@ async def reconnect_and_query(
             return {
                 "type": "text",
                 "text": (
-                    "No source_connection recorded in descriptor. "
-                    "Pass source_connection to SQLLaunchpad to enable reconnect."
+                    "No source_connection in descriptor. "
+                    # TODO: store source_connection in _orbit_descriptor at materialization time
+                    # to enable reconnect transforms.
+                    "source_connection must be present in the DuckDB descriptor to reconnect."
                 ),
             }
 
-        import sqlalchemy as sa
-
         engine = sa.create_engine(source_connection)
         with engine.connect() as conn:
-            result_proxy = conn.execute(sa.text(query))
-            col_names: List[str] = list(result_proxy.keys())
-            raw_rows = result_proxy.fetchall()
+            proxy = conn.execute(sa.text(query))
+            col_names: List[str] = list(proxy.keys())
+            rows: List[List[Any]] = [list(r) for r in proxy.fetchall()]
 
-        rows: List[List[Any]] = [list(r) for r in raw_rows]
-
-        out_path = resource_uri if in_place else _output_path(resource_uri, "reconnect")
-
-        # Materialize result rows into DuckDB
+        out_path = _sql_output_path(resource_uri, "reconnect_and_query", in_place)
         _write_rows_to_duckdb(duckdb, out_path, rows, col_names, in_place)
 
+        overrides = {
+            "last_query": query,
+            "row_count": str(len(rows)),
+            "column_names": json.dumps(col_names),
+        }
         if not in_place:
-            _copy_descriptor(
-                resource_uri,
-                out_path,
-                {
-                    "last_query": query,
-                    "row_count": str(len(rows)),
-                    "column_names": json.dumps(col_names),
-                },
-            )
+            _copy_descriptor(resource_uri, out_path, overrides)
         else:
             con = duckdb.connect(resource_uri)
             try:
-                for key, value in [
-                    ("last_query", query),
-                    ("row_count", str(len(rows))),
-                    ("column_names", json.dumps(col_names)),
-                ]:
+                for key, value in overrides.items():
                     con.execute(
                         "UPDATE _orbit_descriptor SET value = ? WHERE key = ?",
                         [value, key],
@@ -402,17 +384,22 @@ async def reconnect_and_query(
             finally:
                 con.close()
 
-        logger.info("reconnect_and_query: %d rows from '%s'", len(rows), source_connection)
+        logger.info("reconnect_and_query: %d rows from %s", len(rows), source_connection)
         return {
             "type": "text",
             "text": (
-                f"Re-queried source database: {len(rows)} rows, columns {col_names}.\n"
-                f"Resource URI: {out_path}"
+                f"Re-queried source database: {len(rows)} rows, columns {col_names}. "
+                f"Output: {out_path}"
             ),
         }
     except Exception as e:
         logger.error("reconnect_and_query error: %s", e)
         return {"type": "text", "text": f"Error in reconnect_and_query: {e}"}
+
+
+# ------------------------------------------------------------------
+# Internal helper shared with DuckDBLaunchpad
+# ------------------------------------------------------------------
 
 
 def _write_rows_to_duckdb(
@@ -422,8 +409,7 @@ def _write_rows_to_duckdb(
     col_names: List[str],
     in_place: bool,
 ) -> None:
-    """Write rows into a DuckDB file, creating or replacing the result table."""
-    from orbit.launchpads.sql_launchpad import _sql_literal
+    from orbit.launchpads.duckdb_launchpad import _sql_literal
 
     con = duckdb.connect(db_path)
     try:

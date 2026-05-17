@@ -1,9 +1,19 @@
-"""SQLLaunchpad: intercepts LangChain SQLDatabaseToolkit results and materializes them to DuckDB.
+"""DuckDBLaunchpad: materializes structured tool payloads to DuckDB.
 
 Requires: pip install orbit[sql]
+
+Usage with fastmcp (minimal pattern):
+    from orbit.launchpads.duckdb_launchpad import DuckDBLaunchpad
+
+    launchpad = DuckDBLaunchpad(output_dir="./results")
+
+    @server.tool()
+    async def my_tool(query: str) -> list[dict]:
+        ...
+
+    staged_tool = launchpad.stage(my_tool)
 """
 
-import ast
 import json
 import logging
 import os
@@ -15,71 +25,55 @@ from orbit.station import Station
 
 logger = logging.getLogger(__name__)
 
-# Tool name emitted by LangChain's QuerySQLDataBaseTool
-_SQL_QUERY_TOOL = "sql_db_query"
-
 
 @dataclass
-class SQLResultDescriptor:
-    """Metadata stored alongside the materialized DuckDB result file."""
+class DuckDBResultDescriptor:
+    """Metadata stored alongside a materialized DuckDB result file."""
 
     tool_call_id: str
     tool_name: str
-    source_connection: str
-    # Best-effort: populated if the launchpad is given query context externally.
-    # #TODO: capture query from tool input args by overriding _process_result and
-    # plumbing tool input through alongside tool output.
-    last_query: str
     materialized_path: str
     column_names: List[str]
     row_count: int
 
 
-class SQLLaunchpad(Launchpad):
+class DuckDBLaunchpad(Launchpad):
     """
-    Launchpad subclass for LangChain SQLDatabaseToolkit tools.
+    Launchpad that materializes structured tool results to local DuckDB files.
 
-    When sql_db_query fires, intercepts the text result, parses it into rows,
-    and materializes it to a local DuckDB file keyed by tool_call_id.  The LLM
-    receives a compact summary (schema + row count + preview) instead of the raw
-    result string.  Other SQL toolkit tools (schema, list, checker) fall through
-    to default threshold-based masking.
+    Any tool wrapped via stage() has its output intercepted: if the result
+    content contains parseable tabular data (JSON array of objects, arrays, or
+    scalars), it is written to a .duckdb file keyed by tool_call_id.  The LLM
+    receives a compact summary (schema + row count + preview) instead of the
+    full payload.  Non-tabular content falls through to threshold-based masking.
 
     The DuckDB file contains two tables:
-      result              — the query rows
-      _orbit_descriptor   — metadata (connection string, row count, column names, …)
+      result             — the materialized rows
+      _orbit_descriptor  — metadata (tool_call_id, tool_name, row count, column names)
 
-    Transformation tools in sql_transforms.py operate on the DuckDB file via
+    Transformation tools in sql_transforms.py operate on the .duckdb file via
     the resource_uri returned in the summary.
 
     Args:
-        station:            Storage backend for raw payloads (default: StationCache).
-        output_dir:         Directory where .duckdb result files are written.
-        source_connection:  SQLAlchemy connection string of the source DB.
-                            Stored in the descriptor so reconnect transforms can re-query.
-        threshold:          Character limit for masking non-query tool results.
-        preview_rows:       Number of rows to include in the LLM-facing summary.
+        station:      Storage backend for raw payloads (default: StationCache).
+        output_dir:   Directory where .duckdb result files are written.
+        threshold:    Character limit for masking non-tabular content.
+        preview_rows: Number of rows to include in the LLM-facing summary.
     """
 
     def __init__(
         self,
         station: Optional[Station] = None,
-        output_dir: str = "./orbit_sql_results",
-        source_connection: str = "",
+        output_dir: str = "./orbit_duckdb_results",
         threshold: int = 2048,
         preview_rows: int = 5,
     ) -> None:
         super().__init__(station)
         self._output_dir = output_dir
-        self._source_connection = source_connection
         self._threshold = threshold
         self._preview_rows = preview_rows
         os.makedirs(output_dir, exist_ok=True)
-        logger.info(
-            "SQLLaunchpad initialized: output_dir=%s, preview_rows=%d",
-            output_dir,
-            preview_rows,
-        )
+        logger.info("DuckDBLaunchpad initialized: output_dir=%s", output_dir)
 
     # ------------------------------------------------------------------
     # Launchpad abstract implementation
@@ -88,71 +82,49 @@ class SQLLaunchpad(Launchpad):
     def _generate_summary(
         self, tool_call_id: str, tool_name: str, content: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        if tool_name == _SQL_QUERY_TOOL:
-            text = self._extract_text(content)
-            if text is not None:
-                return self._materialize_and_summarize(tool_call_id, tool_name, text)
+        text = self._extract_text(content)
+        if text is not None:
+            rows, col_names = self._parse_tabular(text)
+            if rows is not None:
+                return self._materialize_and_summarize(tool_call_id, tool_name, rows, col_names)
         return self._mask_content_default(content)
 
     # ------------------------------------------------------------------
-    # SQL materialization
+    # Tabular parsing
     # ------------------------------------------------------------------
 
-    def _materialize_and_summarize(
-        self, tool_call_id: str, tool_name: str, text: str
-    ) -> List[Dict[str, Any]]:
-        rows, col_names = self._parse_result_text(text)
-
-        if rows is None:
-            logger.warning("Could not parse SQL result text for tool_call_id: %s", tool_call_id)
-            preview = text[:200] + ("..." if len(text) > 200 else "")
-            return [{"type": "text", "text": f"SQL result (unparseable). Raw preview:\n{preview}"}]
-
-        db_path = os.path.join(self._output_dir, f"{tool_call_id}.duckdb")
-        self._write_duckdb(db_path, rows, col_names, tool_call_id, tool_name)
-
-        descriptor = SQLResultDescriptor(
-            tool_call_id=tool_call_id,
-            tool_name=tool_name,
-            source_connection=self._source_connection,
-            last_query="",
-            materialized_path=db_path,
-            column_names=col_names,
-            row_count=len(rows),
-        )
-        logger.info(
-            "Materialized SQL result: %d rows, %d cols -> %s",
-            len(rows),
-            len(col_names),
-            db_path,
-        )
-        return self._build_summary(descriptor, rows)
-
-    def _parse_result_text(self, text: str) -> Tuple[Optional[List[List[Any]]], List[str]]:
+    def _parse_tabular(self, text: str) -> Tuple[Optional[List[List[Any]]], List[str]]:
         """
-        Parse LangChain SQLDatabase.run() output into (rows, col_names).
+        Attempt to parse text as tabular data.
 
         Handles:
-          - List of dicts:  [{"col": val, ...}, ...]  (include_columns=True)
-          - List of tuples: [(val, ...), ...]          (default)
-          - Single scalars: [val, ...]
-          - Empty:          [] / "" / "None"
-          Returns (None, []) when parsing fails entirely.
+          - JSON array of dicts:   [{"col": val, ...}, ...]
+          - JSON array of arrays:  [[val, ...], ...]
+          - JSON array of scalars: [val, ...]
+          - Python literal forms via ast.literal_eval as fallback
+
+        Returns (None, []) when text is not parseable as tabular data.
         """
         text = text.strip()
-        if not text or text in ("None", "[]", "()", ""):
-            return [], []
+        if not text:
+            return None, []
 
+        parsed: Any = None
         try:
-            parsed = ast.literal_eval(text)
-        except (ValueError, SyntaxError):
-            return None, []
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            pass
 
-        if not isinstance(parsed, list):
-            return None, []
+        if parsed is None:
+            import ast
 
-        if not parsed:
-            return [], []
+            try:
+                parsed = ast.literal_eval(text)
+            except (ValueError, SyntaxError):
+                return None, []
+
+        if not isinstance(parsed, list) or not parsed:
+            return None, []
 
         first = parsed[0]
 
@@ -161,14 +133,41 @@ class SQLLaunchpad(Launchpad):
             rows: List[List[Any]] = [[row.get(c) for c in col_names] for row in parsed]
             return rows, col_names
 
-        if isinstance(first, (tuple, list)):
-            n_cols = len(first)
-            col_names = [f"col_{i}" for i in range(n_cols)]
+        if isinstance(first, (list, tuple)):
+            col_names = [f"col_{i}" for i in range(len(first))]
             rows = [list(item) for item in parsed]
             return rows, col_names
 
-        # Single-column scalar list
         return [[item] for item in parsed], ["result"]
+
+    # ------------------------------------------------------------------
+    # DuckDB materialization
+    # ------------------------------------------------------------------
+
+    def _materialize_and_summarize(
+        self,
+        tool_call_id: str,
+        tool_name: str,
+        rows: List[List[Any]],
+        col_names: List[str],
+    ) -> List[Dict[str, Any]]:
+        db_path = os.path.join(self._output_dir, f"{tool_call_id}.duckdb")
+        self._write_duckdb(db_path, rows, col_names, tool_call_id, tool_name)
+
+        descriptor = DuckDBResultDescriptor(
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            materialized_path=db_path,
+            column_names=col_names,
+            row_count=len(rows),
+        )
+        logger.info(
+            "Materialized to DuckDB: %d rows, %d cols -> %s",
+            len(rows),
+            len(col_names),
+            db_path,
+        )
+        return self._build_summary(descriptor, rows)
 
     def _write_duckdb(
         self,
@@ -178,17 +177,10 @@ class SQLLaunchpad(Launchpad):
         tool_call_id: str,
         tool_name: str,
     ) -> None:
-        try:
-            import duckdb
-        except ImportError:
-            raise ImportError(
-                "duckdb is required for SQLLaunchpad. Install with: pip install orbit[sql]"
-            )
-
+        duckdb = _require_duckdb()
         con = duckdb.connect(db_path)
         try:
             if col_names and rows:
-                # DuckDB infers types automatically via VALUES — use a temp relation.
                 sanitized = [f'"{c}"' for c in col_names]
                 col_list = ", ".join(sanitized)
                 value_rows = ["(" + ", ".join(_sql_literal(v) for v in row) + ")" for row in rows]
@@ -202,8 +194,6 @@ class SQLLaunchpad(Launchpad):
             descriptor_rows = [
                 ("tool_call_id", tool_call_id),
                 ("tool_name", tool_name),
-                ("source_connection", self._source_connection),
-                ("last_query", ""),
                 ("column_names", json.dumps(col_names)),
                 ("row_count", str(len(rows))),
             ]
@@ -213,13 +203,13 @@ class SQLLaunchpad(Launchpad):
             con.close()
 
     def _build_summary(
-        self, descriptor: SQLResultDescriptor, rows: List[List[Any]]
+        self, descriptor: DuckDBResultDescriptor, rows: List[List[Any]]
     ) -> List[Dict[str, Any]]:
         col_names = descriptor.column_names
         preview = rows[: self._preview_rows]
 
         lines: List[str] = [
-            f"SQL result materialized: {descriptor.row_count} rows, {len(col_names)} columns",
+            f"Result materialized to DuckDB: {descriptor.row_count} rows, {len(col_names)} columns",
             f"Resource URI: {descriptor.materialized_path}",
             f"Columns: {col_names}",
             "",
@@ -245,7 +235,7 @@ class SQLLaunchpad(Launchpad):
         return [{"type": "text", "text": "\n".join(lines)}]
 
     # ------------------------------------------------------------------
-    # Default masking fallback (for non-query SQL tools)
+    # Default masking fallback (non-tabular content)
     # ------------------------------------------------------------------
 
     def _mask_content_default(self, content: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -279,6 +269,22 @@ class SQLLaunchpad(Launchpad):
         return None
 
 
+# ------------------------------------------------------------------
+# Module-level helpers (shared with sql_transforms.py)
+# ------------------------------------------------------------------
+
+
+def _require_duckdb() -> Any:
+    try:
+        import duckdb
+
+        return duckdb
+    except ImportError:
+        raise ImportError(
+            "duckdb is required for DuckDBLaunchpad. Install with: pip install orbit[sql]"
+        )
+
+
 def _sql_literal(value: Any) -> str:
     """Render a Python value as a DuckDB SQL literal."""
     if value is None:
@@ -287,6 +293,5 @@ def _sql_literal(value: Any) -> str:
         return "TRUE" if value else "FALSE"
     if isinstance(value, (int, float)):
         return str(value)
-    # Escape single quotes by doubling them
     escaped = str(value).replace("'", "''")
     return f"'{escaped}'"

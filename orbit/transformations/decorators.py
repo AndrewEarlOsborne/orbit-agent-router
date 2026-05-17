@@ -139,9 +139,10 @@ def orbit_transformation_tool_mcp(
                     ctx.execution_id,
                 )
 
-                # Call the actual transformation function
+                # Pass resource_uri unchanged — functions own their output path.
+                # Each transform computes: out = uri if in_place else f"{base}.{name}.ext"
                 result = await func(
-                    resource_uri=ctx.output_uri,
+                    resource_uri=resource_uri,
                     in_place=in_place,
                     **kwargs,
                 )
@@ -210,9 +211,9 @@ def orbit_transformation_tool_mcp(
                     ctx.execution_id,
                 )
 
-                # Call the actual transformation function
+                # Pass resource_uri unchanged — functions own their output path.
                 result = func(
-                    resource_uri=ctx.output_uri,
+                    resource_uri=resource_uri,
                     in_place=in_place,
                     **kwargs,
                 )

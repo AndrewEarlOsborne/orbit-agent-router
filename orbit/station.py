@@ -109,16 +109,30 @@ class StationDB(Station):
     async def _ensure_connection(self) -> None:
         """Ensure database connection is established"""
         if self._db is None:
-            try:
-                import aiosqlite
+            import aiosqlite
 
-                self._db = await aiosqlite.connect(self.connection_string.replace("sqlite:///", ""))
+            db_path = self.connection_string.replace("sqlite:///", "")
+            if not db_path:
+                raise ValueError(
+                    f"Invalid connection string: '{self.connection_string}'. "
+                    "Expected format: 'sqlite:///path/to/db.sqlite'"
+                )
+            try:
+                self._db = await aiosqlite.connect(db_path, timeout=30)
                 await self._create_table()
                 logger.info("Database connection established")
-            except ImportError:
-                raise ImportError(
-                    "aiosqlite is required for StationDB. Install with: pip install aiosqlite"
-                )
+            except aiosqlite.OperationalError as exc:
+                raise ConnectionError(
+                    f"Failed to open SQLite database at '{db_path}': {exc}"
+                ) from exc
+            except TimeoutError as exc:
+                raise TimeoutError(
+                    f"Connection to SQLite database at '{db_path}' timed out"
+                ) from exc
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Unexpected error connecting to SQLite database at '{db_path}': {exc}"
+                ) from exc
 
     async def _create_table(self) -> None:
         """Create payloads table if it doesn't exist"""

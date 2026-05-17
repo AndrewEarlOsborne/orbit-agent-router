@@ -165,11 +165,15 @@ class MCPClientInterceptor:
 
                     new_content = []
                     for item in intercepted_result["content"]:
-                        if isinstance(item, dict):
-                            item_type = item.get("type", "text")
+                        if not isinstance(item, dict):
+                            new_content.append(item)
+                            continue
+
+                        item_type = item.get("type", "text")
+                        try:
                             if item_type == "text":
                                 text_val = item.get("text", "")
-                                if isinstance(text_val, dict):
+                                if not isinstance(text_val, str):
                                     text_val = str(text_val)
                                 new_content.append(types.TextContent(type="text", text=text_val))
                             elif item_type == "image":
@@ -181,18 +185,51 @@ class MCPClientInterceptor:
                                     )
                                 )
                             elif item_type == "resource":
-                                new_content.append(
-                                    types.EmbeddedResource(
-                                        type="resource", resource=item.get("resource", {})
+                                resource = item.get("resource")
+                                if not isinstance(resource, dict):
+                                    raise TypeError(
+                                        f"Expected dict for 'resource', got {type(resource).__name__}"
                                     )
+                                new_content.append(
+                                    types.EmbeddedResource(type="resource", resource=resource)
                                 )
-                        else:
-                            new_content.append(item)
+                            else:
+                                # Unknown content type: preserve as text to avoid silent data loss
+                                logger.warning(
+                                    "Unknown MCP content type '%s'; falling back to TextContent",
+                                    item_type,
+                                )
+                                new_content.append(types.TextContent(type="text", text=str(item)))
+                        except Exception as item_exc:
+                            # Construction of a typed MCP object failed; preserve raw item text
+                            logger.warning(
+                                "Failed to construct MCP type for item type '%s': %s. "
+                                "Falling back to raw TextContent.",
+                                item_type,
+                                item_exc,
+                            )
+                            new_content.append(types.TextContent(type="text", text=str(item)))
 
-                    original_result.content = new_content
-                    return original_result
+                    try:
+                        original_result.content = new_content
+                        return original_result
+                    except (AttributeError, TypeError) as assign_exc:
+                        logger.warning(
+                            "Could not assign reconstructed content to result object: %s. "
+                            "Returning intercepted dict result.",
+                            assign_exc,
+                        )
+                        return intercepted_result
+
                 except ImportError:
-                    pass
+                    # mcp package unavailable; caller gets the dict form
+                    logger.debug("mcp package not available; returning intercepted dict result")
+                except Exception as exc:
+                    logger.warning(
+                        "Unexpected error during MCP result unwrap: %s. "
+                        "Returning intercepted dict result.",
+                        exc,
+                    )
         return intercepted_result
 
     def enable(self) -> None:
