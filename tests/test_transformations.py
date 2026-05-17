@@ -1,7 +1,6 @@
 """Tests for Orbit Transformations framework"""
 
 import pytest
-import inspect
 from orbit.transformations.base import DataType, TransformationRegistry, get_registry
 from orbit.transformations.decorators import orbit_transformation_tool_mcp
 from orbit.transformations.resources import ResourceManager, TransformContext
@@ -202,9 +201,7 @@ class TestDecorator:
         """Test that decorator registers the transformation"""
         registry = get_registry()
 
-        @orbit_transformation_tool_mcp(
-            data_type=DataType.CSV, description="Test transform"
-        )
+        @orbit_transformation_tool_mcp(data_type=DataType.CSV, description="Test transform")
         async def test_transform(resource_uri: str, in_place: bool = False):
             return {"type": "text", "text": "Test"}
 
@@ -216,9 +213,7 @@ class TestDecorator:
     def test_decorator_preserves_function_name(self):
         """Test that decorator preserves function name"""
 
-        @orbit_transformation_tool_mcp(
-            data_type=DataType.CSV, description="Test transform"
-        )
+        @orbit_transformation_tool_mcp(data_type=DataType.CSV, description="Test transform")
         async def my_custom_transform(resource_uri: str, in_place: bool = False):
             return {"type": "text", "text": "Test"}
 
@@ -242,9 +237,7 @@ class TestDecorator:
     async def test_decorator_async_function_execution(self):
         """Test that async decorated function can be executed"""
 
-        @orbit_transformation_tool_mcp(
-            data_type=DataType.CSV, description="Test async execution"
-        )
+        @orbit_transformation_tool_mcp(data_type=DataType.CSV, description="Test async execution")
         async def test_transform_async(
             resource_uri: str, param1: str = "default", in_place: bool = False
         ):
@@ -265,12 +258,8 @@ class TestDecorator:
     def test_decorator_sync_function_execution(self):
         """Test that sync decorated function can be executed"""
 
-        @orbit_transformation_tool_mcp(
-            data_type=DataType.CSV, description="Test sync execution"
-        )
-        def test_transform_sync(
-            resource_uri: str, param1: str = "default", in_place: bool = False
-        ):
+        @orbit_transformation_tool_mcp(data_type=DataType.CSV, description="Test sync execution")
+        def test_transform_sync(resource_uri: str, param1: str = "default", in_place: bool = False):
             return {
                 "type": "text",
                 "text": f"Processed {resource_uri} with {param1}",
@@ -334,9 +323,7 @@ class TestIntegration:
         @orbit_transformation_tool_mcp(
             data_type=DataType.JSON, description="JSON transform for testing"
         )
-        async def json_transform(
-            resource_uri: str, field: str = "data", in_place: bool = False
-        ):
+        async def json_transform(resource_uri: str, field: str = "data", in_place: bool = False):
             return {"type": "text", "text": f"Processed field: {field}"}
 
         registry = get_registry()

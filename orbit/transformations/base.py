@@ -44,9 +44,7 @@ class TransformationMetadata:
         self.description = description
         self.function = function
         self.parameters = parameters
-        logger.debug(
-            "Created TransformationMetadata for %s (%s)", name, data_type.value
-        )
+        logger.debug("Created TransformationMetadata for %s (%s)", name, data_type.value)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert metadata to dictionary representation"""
@@ -90,9 +88,7 @@ class TransformationRegistry:
             ValueError: If transformation already registered for this name/type combo
         """
         if name in self._transforms[data_type]:
-            raise ValueError(
-                f"Transformation '{name}' already registered for {data_type.value}"
-            )
+            raise ValueError(f"Transformation '{name}' already registered for {data_type.value}")
 
         metadata = TransformationMetadata(
             name=name,
@@ -108,9 +104,7 @@ class TransformationRegistry:
             data_type.value,
         )
 
-    def get(
-        self, data_type: DataType, name: str
-    ) -> Optional[TransformationMetadata]:
+    def get(self, data_type: DataType, name: str) -> Optional[TransformationMetadata]:
         """
         Get a registered transformation by type and name
 

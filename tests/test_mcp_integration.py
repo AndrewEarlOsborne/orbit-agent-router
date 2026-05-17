@@ -102,9 +102,7 @@ class TestRealMCPIntegration:
         launchpad = DefaultLaunchpad(station=station, threshold=2048)
 
         server_params = StdioServerParameters(
-            command=sys.executable,
-            args=[str(mcp_server_script)],
-            env=None
+            command=sys.executable, args=[str(mcp_server_script)], env=None
         )
 
         async with stdio_client(server_params) as (read_stream, write_stream):
@@ -137,9 +135,7 @@ class TestRealMCPIntegration:
         launchpad = DefaultLaunchpad(station=station, threshold=2048)
 
         server_params = StdioServerParameters(
-            command=sys.executable,
-            args=[str(mcp_server_script)],
-            env=None
+            command=sys.executable, args=[str(mcp_server_script)], env=None
         )
 
         async with stdio_client(server_params) as (read_stream, write_stream):
@@ -167,9 +163,7 @@ class TestRealMCPIntegration:
         launchpad = DefaultLaunchpad(station=station, threshold=2048)
 
         server_params = StdioServerParameters(
-            command=sys.executable,
-            args=[str(mcp_server_script)],
-            env=None
+            command=sys.executable, args=[str(mcp_server_script)], env=None
         )
 
         async with stdio_client(server_params) as (read_stream, write_stream):
@@ -199,9 +193,7 @@ class TestRealMCPIntegration:
         launchpad = DefaultLaunchpad(station=station, threshold=2048)
 
         server_params = StdioServerParameters(
-            command=sys.executable,
-            args=[str(mcp_server_script)],
-            env=None
+            command=sys.executable, args=[str(mcp_server_script)], env=None
         )
 
         async with stdio_client(server_params) as (read_stream, write_stream):
@@ -230,4 +222,7 @@ class TestRealMCPIntegration:
                 if isinstance(llm_visible_content.text, str):
                     assert llm_visible_content.text != "x" * 3000
                 else:
-                    assert "masked" in str(llm_visible_content.text).lower() or "length" in llm_visible_content.text
+                    assert (
+                        "masked" in str(llm_visible_content.text).lower()
+                        or "length" in llm_visible_content.text
+                    )

@@ -6,6 +6,7 @@ from orbit import DefaultLaunchpad, StationCache
 from orbit.wrappers.mcp_wrapper import MCPToolWrapper, MCPClientInterceptor
 from mcp.types import CallToolResult, TextContent
 
+
 class MockMCPTool:
     """Mock MCP tool for testing"""
 
@@ -53,7 +54,7 @@ class TestMCPToolWrapper:
         original_tool = MockMCPTool(
             name="test_tool",
             description="A test tool",
-            result_content=[{"type": "text", "text": "short result"}]
+            result_content=[{"type": "text", "text": "short result"}],
         )
 
         wrapped_tool = MCPToolWrapper(original_tool, launchpad)
@@ -70,9 +71,7 @@ class TestMCPToolWrapper:
 
         result_content = [{"type": "text", "text": "test result"}]
         original_tool = MockMCPTool(
-            name="test_tool",
-            description="A test tool",
-            result_content=result_content
+            name="test_tool", description="A test tool", result_content=result_content
         )
 
         wrapped_tool = MCPToolWrapper(original_tool, launchpad)
@@ -100,9 +99,7 @@ class TestMCPToolWrapper:
         result_content = [{"type": "text", "text": long_text}]
 
         original_tool = MockMCPTool(
-            name="test_tool",
-            description="A test tool",
-            result_content=result_content
+            name="test_tool", description="A test tool", result_content=result_content
         )
 
         wrapped_tool = MCPToolWrapper(original_tool, launchpad)
@@ -125,9 +122,7 @@ class TestMCPToolWrapper:
         result_content = [{"type": "text", "text": short_text}]
 
         original_tool = MockMCPTool(
-            name="test_tool",
-            description="A test tool",
-            result_content=result_content
+            name="test_tool", description="A test tool", result_content=result_content
         )
 
         wrapped_tool = MCPToolWrapper(original_tool, launchpad)
@@ -152,9 +147,7 @@ class TestMCPToolWrapper:
         ]
 
         original_tool = MockMCPTool(
-            name="test_tool",
-            description="A test tool",
-            result_content=result_content
+            name="test_tool", description="A test tool", result_content=result_content
         )
 
         wrapped_tool = MCPToolWrapper(original_tool, launchpad)
@@ -250,4 +243,4 @@ class TestMCPClientInterceptor:
 
         # Result should be masked
         assert isinstance(result.content, list)
-        assert '100' in result.content[0].text
+        assert "100" in result.content[0].text

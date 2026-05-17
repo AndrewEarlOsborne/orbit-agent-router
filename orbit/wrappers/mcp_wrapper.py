@@ -40,18 +40,14 @@ class MCPToolWrapper:
             Intercepted and summarized result
         """
         tool_call_id = str(uuid.uuid4())
-        logger.debug(
-            "Executing MCP tool '%s' with tool_call_id: %s", self.name, tool_call_id
-        )
+        logger.debug("Executing MCP tool '%s' with tool_call_id: %s", self.name, tool_call_id)
 
         if hasattr(self._original_tool, "__call__"):
             result = await self._original_tool(**kwargs)
         else:
             raise AttributeError(f"Tool {self.name} is not callable")
 
-        intercepted_result = await self._launchpad._process_result(
-            tool_call_id, self.name, result
-        )
+        intercepted_result = await self._launchpad._process_result(tool_call_id, self.name, result)
 
         return intercepted_result
 
@@ -107,9 +103,7 @@ class MCPClientInterceptor:
         """
         tool_call_id = str(uuid.uuid4())
         logger.debug(
-            "Intercepting call_tool for tool: %s, tool_call_id: %s",
-            tool_name,
-            tool_call_id
+            "Intercepting call_tool for tool: %s, tool_call_id: %s", tool_name, tool_call_id
         )
 
         result = await self._original_call_tool(tool_name, tool_args)
@@ -168,6 +162,7 @@ class MCPClientInterceptor:
             if hasattr(original_result, "content"):
                 try:
                     from mcp import types
+
                     new_content = []
                     for item in intercepted_result["content"]:
                         if isinstance(item, dict):
@@ -178,16 +173,19 @@ class MCPClientInterceptor:
                                     text_val = str(text_val)
                                 new_content.append(types.TextContent(type="text", text=text_val))
                             elif item_type == "image":
-                                new_content.append(types.ImageContent(
-                                    type="image",
-                                    data=item.get("data", ""),
-                                    mimeType=item.get("mimeType", "image/png")
-                                ))
+                                new_content.append(
+                                    types.ImageContent(
+                                        type="image",
+                                        data=item.get("data", ""),
+                                        mimeType=item.get("mimeType", "image/png"),
+                                    )
+                                )
                             elif item_type == "resource":
-                                new_content.append(types.EmbeddedResource(
-                                    type="resource",
-                                    resource=item.get("resource", {})
-                                ))
+                                new_content.append(
+                                    types.EmbeddedResource(
+                                        type="resource", resource=item.get("resource", {})
+                                    )
+                                )
                         else:
                             new_content.append(item)
 
@@ -237,4 +235,3 @@ def intercept_mcp_session(session: Any, launchpad: "Launchpad") -> MCPClientInte
     interceptor = MCPClientInterceptor(session, launchpad)
     interceptor.enable()
     return interceptor
-

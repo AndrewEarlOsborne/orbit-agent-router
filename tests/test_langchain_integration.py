@@ -20,11 +20,7 @@ def search_database(query: str) -> str:
 def fetch_api_data(endpoint: str) -> Dict[str, Any]:
     """Fetch data from API endpoint"""
     large_response = "y" * 3000
-    return {
-        "endpoint": endpoint,
-        "data": large_response,
-        "status": "success"
-    }
+    return {"endpoint": endpoint, "data": large_response, "status": "success"}
 
 
 @tool

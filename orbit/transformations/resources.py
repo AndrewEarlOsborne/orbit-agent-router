@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 class ResourceReference:
     """Reference to a resource stored in Orbit Station"""
 
-    def __init__(self, tool_call_id: str, uri: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self, tool_call_id: str, uri: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
         """
         Initialize resource reference
 
@@ -185,9 +187,7 @@ class TransformContext:
         self.execution_id = str(uuid.uuid4())
         self.manager = ResourceManager()
 
-        output_uri = self.manager.generate_output_uri(
-            original_uri, transform_name, in_place
-        )
+        output_uri = self.manager.generate_output_uri(original_uri, transform_name, in_place)
         self.output_uri = output_uri
         self.new_tool_call_id = tool_call_id if in_place else f"{tool_call_id}_{transform_name}"
 

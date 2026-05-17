@@ -112,9 +112,7 @@ class StationDB(Station):
             try:
                 import aiosqlite
 
-                self._db = await aiosqlite.connect(
-                    self.connection_string.replace("sqlite:///", "")
-                )
+                self._db = await aiosqlite.connect(self.connection_string.replace("sqlite:///", ""))
                 await self._create_table()
                 logger.info("Database connection established")
             except ImportError:

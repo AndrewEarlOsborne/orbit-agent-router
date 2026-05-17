@@ -95,9 +95,7 @@ class LangChainToolWrapper:
             input_dict = kwargs if kwargs else (args[0] if args else {})
             result = self._original_tool.invoke(input_dict)
         else:
-            raise AttributeError(
-                f"Tool {self.name} has no sync execution method (_run or invoke)"
-            )
+            raise AttributeError(f"Tool {self.name} has no sync execution method (_run or invoke)")
 
         result_wrapped = self._wrap_langchain_result(result)
 
@@ -106,6 +104,7 @@ class LangChainToolWrapper:
         try:
             loop = asyncio.get_running_loop()
             import nest_asyncio
+
             nest_asyncio.apply()
             intercepted_result = loop.run_until_complete(
                 self._launchpad._process_result(tool_call_id, self.name, result_wrapped)

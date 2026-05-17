@@ -74,9 +74,7 @@ class Launchpad(ABC):
         """
         pass
 
-    async def _process_result(
-        self, tool_call_id: str, tool_name: str, result: Any
-    ) -> Any:
+    async def _process_result(self, tool_call_id: str, tool_name: str, result: Any) -> Any:
         """
         Internal method to intercept and process tool results
 
@@ -179,9 +177,7 @@ class Launchpad(ABC):
 class DefaultLaunchpad(Launchpad):
     """Default implementation with 2048-character masking threshold"""
 
-    def __init__(
-        self, station: Union[Station, None] = None, threshold: int = 2048
-    ) -> None:
+    def __init__(self, station: Union[Station, None] = None, threshold: int = 2048) -> None:
         """
         Initialize DefaultLaunchpad
 

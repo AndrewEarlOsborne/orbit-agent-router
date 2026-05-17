@@ -259,8 +259,7 @@ async def rename_csv(
         # Rename columns in rows
         renamed_rows = []
         for row in rows:
-            renamed_row = {new_fieldnames[i]: row[old_col]
-                          for i, old_col in enumerate(fieldnames)}
+            renamed_row = {new_fieldnames[i]: row[old_col] for i, old_col in enumerate(fieldnames)}
             renamed_rows.append(renamed_row)
 
         # Write renamed CSV

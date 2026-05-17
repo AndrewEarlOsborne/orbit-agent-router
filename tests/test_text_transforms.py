@@ -12,6 +12,7 @@ from orbit.transformations.examples.text_transforms import search_replace_text
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_tmp(content: str) -> str:
     """Write content to a temp file and return its path."""
     fd, path = tempfile.mkstemp(suffix=".txt")
@@ -23,6 +24,7 @@ def _write_tmp(content: str) -> str:
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
+
 
 class TestRegistration:
     def test_registered_in_global_registry(self) -> None:
@@ -40,6 +42,7 @@ class TestRegistration:
 # ---------------------------------------------------------------------------
 # Literal search-and-replace
 # ---------------------------------------------------------------------------
+
 
 class TestLiteralReplace:
     @pytest.mark.asyncio
@@ -135,6 +138,7 @@ class TestLiteralReplace:
 # Regex search-and-replace
 # ---------------------------------------------------------------------------
 
+
 class TestRegexReplace:
     @pytest.mark.asyncio
     async def test_regex_digit_removal(self) -> None:
@@ -205,6 +209,7 @@ class TestRegexReplace:
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
+
 
 class TestErrorHandling:
     @pytest.mark.asyncio

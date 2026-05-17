@@ -89,19 +89,10 @@ class TestStationCache:
                 {"type": "text", "text": "some text"},
                 {
                     "type": "data",
-                    "data": {
-                        "nested": {
-                            "deeply": {
-                                "values": [1, 2, 3],
-                                "flag": True
-                            }
-                        }
-                    }
-                }
+                    "data": {"nested": {"deeply": {"values": [1, 2, 3], "flag": True}}},
+                },
             ],
-            "metadata": {
-                "timestamp": "2024-01-01T00:00:00Z"
-            }
+            "metadata": {"timestamp": "2024-01-01T00:00:00Z"},
         }
 
         await station.store_payload("complex-id", complex_payload)
@@ -171,14 +162,8 @@ class TestStationDB:
                     {"type": "text", "text": "some text"},
                     {
                         "type": "data",
-                        "data": {
-                            "nested": {
-                                "values": [1, 2, 3],
-                                "flag": True,
-                                "none_value": None
-                            }
-                        }
-                    }
+                        "data": {"nested": {"values": [1, 2, 3], "flag": True, "none_value": None}},
+                    },
                 ]
             }
 
@@ -191,8 +176,7 @@ class TestStationDB:
     async def test_custom_table_name(self) -> None:
         """Test using custom table name"""
         async with StationDB(
-            connection_string="sqlite:///:memory:",
-            table_name="custom_payloads"
+            connection_string="sqlite:///:memory:", table_name="custom_payloads"
         ) as station:
             payload = {"content": [{"type": "text", "text": "test"}]}
 

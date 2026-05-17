@@ -7,7 +7,7 @@ from pydantic import BaseModel, create_model
 import logging
 
 from orbit.transformations.base import DataType, get_registry
-from orbit.transformations.resources import ResourceManager, TransformContext
+from orbit.transformations.resources import TransformContext
 
 logger = logging.getLogger(__name__)
 

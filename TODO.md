@@ -5,8 +5,11 @@
 1. ADK - Investigate and Implement
 2. CLI - lightweight agent implementation allowing integration
 #### Stations
-1. MySQL
+1. MySQL/Local SQL
 2. ValKey (Redis Fork)
+
+#### Tool integration examples
+1. UI Elements - AIUI/Json configs?
 
 ### New Features
 

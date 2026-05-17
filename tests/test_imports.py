@@ -1,7 +1,6 @@
 """Test that orbit package imports work correctly"""
 
 
-
 def test_import_core_classes() -> None:
     """Test importing core classes"""
     from orbit import Launchpad, DefaultLaunchpad, Station, StationCache, StationDB

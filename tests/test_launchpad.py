@@ -80,15 +80,7 @@ class TestDefaultLaunchpad:
         long_text = "x" * 100
         result = {
             "content": [
-                {
-                    "type": "data",
-                    "data": {
-                        "nested": {
-                            "long_value": long_text,
-                            "short_value": "ok"
-                        }
-                    }
-                }
+                {"type": "data", "data": {"nested": {"long_value": long_text, "short_value": "ok"}}}
             ]
         }
 
@@ -107,14 +99,7 @@ class TestDefaultLaunchpad:
 
         long_text = "x" * 100
         result = {
-            "content": [
-                {
-                    "type": "data",
-                    "data": {
-                        "items": ["short", long_text, "another short"]
-                    }
-                }
-            ]
+            "content": [{"type": "data", "data": {"items": ["short", long_text, "another short"]}}]
         }
 
         intercepted = await launchpad._process_result("id-1", "test_tool", result)
@@ -136,7 +121,7 @@ class TestDefaultLaunchpad:
             "content": [
                 {"type": "text", "text": "short"},
                 {"type": "text", "text": long_text},
-                {"type": "data", "data": {"key": "value"}}
+                {"type": "data", "data": {"key": "value"}},
             ]
         }
 
@@ -265,10 +250,9 @@ class TestCustomLaunchpad:
                 summary_content = []
                 for item in content:
                     if item.get("type") == "text":
-                        summary_content.append({
-                            "type": "text",
-                            "text": f"[REDACTED by {tool_name}]"
-                        })
+                        summary_content.append(
+                            {"type": "text", "text": f"[REDACTED by {tool_name}]"}
+                        )
                     else:
                         summary_content.append(item)
                 return summary_content

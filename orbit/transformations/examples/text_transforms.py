@@ -2,7 +2,7 @@
 
 import re
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from pydantic import BaseModel, field_validator
 
 from orbit.transformations.decorators import orbit_transformation_tool_mcp
@@ -86,9 +86,12 @@ async def search_replace_text(
                     new_text = original_text.replace(pattern, replacement, count_limit)
                 else:
                     new_text = original_text.replace(pattern, replacement)
-                n_subs = (len(original_text) - len(original_text.replace(pattern, replacement))) // max(
-                    len(pattern), 1
-                ) if count_limit == 0 else count_limit
+                n_subs = (
+                    (len(original_text) - len(original_text.replace(pattern, replacement)))
+                    // max(len(pattern), 1)
+                    if count_limit == 0
+                    else count_limit
+                )
 
         with open(resource_uri, "w", encoding="utf-8") as f:
             f.write(new_text)

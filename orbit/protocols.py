@@ -32,8 +32,7 @@ class LangChainToolProtocol(Protocol):
 class ToolResult(Protocol):
     """Protocol for tool execution results"""
 
-    def __init__(self, content: List[Dict[str, Any]]) -> None:
-        ...
+    def __init__(self, content: List[Dict[str, Any]]) -> None: ...
 
 
 class MCPToolResult:
