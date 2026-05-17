@@ -26,6 +26,12 @@ from orbit.wrappers.langchain_wrapper import (
     LangChainToolNodeInterceptor,
     intercept_tool_node,
 )
+from orbit.transformations import (
+    DataType,
+    TransformationRegistry,
+    orbit_transformation_tool_mcp,
+    ResourceManager,
+)
 
 __version__ = "0.1.0"
 
@@ -52,4 +58,9 @@ __all__ = [
     "wrap_langchain_tool",
     "LangChainToolNodeInterceptor",
     "intercept_tool_node",
+    # Transformations framework
+    "DataType",
+    "TransformationRegistry",
+    "orbit_transformation_tool_mcp",
+    "ResourceManager",
 ]
