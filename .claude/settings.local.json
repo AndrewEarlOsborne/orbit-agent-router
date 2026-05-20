@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(make *)"
+      "Bash(make *)",
+      "Bash(python3 -m pytest tests/test_launchpad.py tests/test_mcp_wrapper.py tests/test_station.py -q)"
     ]
   }
 }

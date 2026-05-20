@@ -1,4 +1,4 @@
-"""Launchpad classes for launching shuttles and summarizing tool payloads"""
+"""Launchpad classes for wrapping tools and routing payload shuttles to the station"""
 
 from typing import Any, Dict, List, Union
 from abc import ABC, abstractmethod
@@ -6,6 +6,7 @@ import logging
 import copy
 
 from orbit.station import Station, StationCache
+from orbit.shuttle import Shuttle
 from orbit.protocols import MCPToolProtocol, LangChainToolProtocol, ToolProtocol
 
 logger = logging.getLogger(__name__)
@@ -27,31 +28,31 @@ class Launchpad(ABC):
 
     def stage(self, tool: ToolProtocol) -> ToolProtocol:
         """
-        Launch a tool as a shuttle, enabling payload interception
+        Wrap a tool into an Orbit Wrapped Tool
 
-        The launched shuttle has an identical interface to the original tool
-        but intercepts results: full payloads are stored at the station and
-        a summarized manifest is returned to the agent.
+        The wrapped tool has an identical interface to the original but
+        intercepts results: the full payload is packaged as a Shuttle and
+        stored at the Station; a manifest is returned to the agent.
 
         Args:
             tool: Tool object (MCP tool, LangChain tool, etc.)
 
         Returns:
-            Shuttle wrapping the original tool
+            Orbit Wrapped Tool with identical signature but intercepted execution
 
         Raises:
             TypeError: If tool type is not supported
         """
         if isinstance(tool, MCPToolProtocol):
-            logger.debug("Launching MCP shuttle for tool: %s", tool.name)
-            from orbit.shuttles.mcp_shuttle import launch_mcp_shuttle
+            logger.debug("Wrapping MCP tool: %s", tool.name)
+            from orbit.wrappers.mcp_wrapper import wrap_mcp_tool
 
-            return launch_mcp_shuttle(tool, self)
+            return wrap_mcp_tool(tool, self)
         elif isinstance(tool, LangChainToolProtocol):
-            logger.debug("Launching LangChain shuttle for tool: %s", tool.name)
-            from orbit.shuttles.langchain_shuttle import launch_langchain_shuttle
+            logger.debug("Wrapping LangChain tool: %s", tool.name)
+            from orbit.wrappers.langchain_wrapper import wrap_langchain_tool
 
-            return launch_langchain_shuttle(tool, self)
+            return wrap_langchain_tool(tool, self)
         else:
             raise TypeError(
                 f"Unsupported tool type: {type(tool)}. "
@@ -101,10 +102,16 @@ class Launchpad(ABC):
             raise ValueError(f"Invalid tool result for tool_call_id: {tool_call_id}")
 
         original_result = copy.deepcopy(result)
-        await self.station.store_payload(tool_call_id, original_result)
-        logger.debug("Stored original payload for tool_call_id: %s", tool_call_id)
-
         content = self._extract_content(result)
+
+        shuttle = Shuttle(
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            payload=original_result,
+            content=content,
+        )
+        await self.station.store_payload(tool_call_id, shuttle)
+        logger.debug("Docked shuttle at station for tool_call_id: %s", tool_call_id)
 
         summary_content = self._generate_summary(tool_call_id, tool_name, content)
         logger.debug("Generated summary for tool_call_id: %s", tool_call_id)

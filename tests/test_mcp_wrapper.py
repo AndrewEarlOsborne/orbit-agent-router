@@ -1,9 +1,9 @@
-"""Test suite for MCP shuttle functionality"""
+"""Test suite for MCP tool wrapping functionality"""
 
 import pytest
 from typing import Any, Dict, List
-from orbit import DefaultLaunchpad, StationCache
-from orbit.shuttles.mcp_shuttle import MCPShuttle, MCPClientInterceptor
+from orbit import DefaultLaunchpad, StationCache, Shuttle
+from orbit.wrappers.mcp_wrapper import MCPToolWrapper, MCPClientInterceptor
 from mcp.types import CallToolResult, TextContent
 
 
@@ -42,12 +42,12 @@ class MockMCPSession:
         return CallToolResult(content=content_objects)
 
 
-class TestMCPShuttle:
-    """Test MCP shuttle behavior"""
+class TestMCPToolWrapper:
+    """Test MCP tool wrapping"""
 
     @pytest.mark.asyncio
-    async def test_shuttle_preserves_tool_metadata(self) -> None:
-        """Test that shuttle preserves tool name, description, and schema"""
+    async def test_wrapper_preserves_tool_metadata(self) -> None:
+        """Test that wrapper preserves tool name, description, and schema"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station)
 
@@ -57,15 +57,15 @@ class TestMCPShuttle:
             result_content=[{"type": "text", "text": "short result"}],
         )
 
-        shuttle = MCPShuttle(original_tool, launchpad)
+        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
 
-        assert shuttle.name == "test_tool"
-        assert shuttle.description == "A test tool"
-        assert shuttle.inputSchema == {"type": "object", "properties": {}}
+        assert wrapped_tool.name == "test_tool"
+        assert wrapped_tool.description == "A test tool"
+        assert wrapped_tool.inputSchema == {"type": "object", "properties": {}}
 
     @pytest.mark.asyncio
-    async def test_shuttle_stores_full_payload(self) -> None:
-        """Test that shuttle stores full payload at the station"""
+    async def test_wrapper_docks_shuttle_at_station(self) -> None:
+        """Test that wrapper docks a shuttle carrying the full payload at the station"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station)
 
@@ -74,22 +74,23 @@ class TestMCPShuttle:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        shuttle = MCPShuttle(original_tool, launchpad)
-        result = await shuttle(arg="value")
+        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
+        result = await wrapped_tool(arg="value")
         assert result["content"][0]["text"] == "test result"
 
-        # Station should have one docked payload
+        # Station should have one docked shuttle
         assert len(station._cache) > 0
 
-        # Get the stored payload
+        # Shuttle at station carries the full payload
         tool_call_ids = list(station._cache.keys())
-        stored_payload = await station.get_payload(tool_call_ids[0])
+        docked_shuttle = await station.get_payload(tool_call_ids[0])
 
-        assert stored_payload == {"content": result_content}
+        assert isinstance(docked_shuttle, Shuttle)
+        assert docked_shuttle.payload == {"content": result_content}
 
     @pytest.mark.asyncio
-    async def test_shuttle_masks_long_content(self) -> None:
-        """Test that shuttle masks content exceeding threshold"""
+    async def test_wrapper_masks_long_content(self) -> None:
+        """Test that wrapper masks content exceeding threshold"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station, threshold=100)
 
@@ -102,8 +103,8 @@ class TestMCPShuttle:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        shuttle = MCPShuttle(original_tool, launchpad)
-        result = await shuttle(arg="value")
+        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
+        result = await wrapped_tool(arg="value")
 
         # Result should be masked
         assert result["content"][0]["type"] == "text"
@@ -113,8 +114,8 @@ class TestMCPShuttle:
         assert "summary" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_shuttle_preserves_short_content(self) -> None:
-        """Test that shuttle preserves content under threshold"""
+    async def test_wrapper_preserves_short_content(self) -> None:
+        """Test that wrapper preserves content under threshold"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station, threshold=100)
 
@@ -125,16 +126,16 @@ class TestMCPShuttle:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        shuttle = MCPShuttle(original_tool, launchpad)
-        result = await shuttle(arg="value")
+        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
+        result = await wrapped_tool(arg="value")
 
         # Result should not be masked
         assert result["content"][0]["type"] == "text"
         assert result["content"][0]["text"] == short_text
 
     @pytest.mark.asyncio
-    async def test_shuttle_handles_multiple_content_items(self) -> None:
-        """Test that shuttle handles multiple content items"""
+    async def test_wrapper_handles_multiple_content_items(self) -> None:
+        """Test that wrapper handles multiple content items"""
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station, threshold=50)
 
@@ -150,8 +151,8 @@ class TestMCPShuttle:
             name="test_tool", description="A test tool", result_content=result_content
         )
 
-        shuttle = MCPShuttle(original_tool, launchpad)
-        result = await shuttle(arg="value")
+        wrapped_tool = MCPToolWrapper(original_tool, launchpad)
+        result = await wrapped_tool(arg="value")
 
         # First item should not be masked
         assert result["content"][0]["text"] == "short"
@@ -216,15 +217,16 @@ class TestMCPClientInterceptor:
 
         assert result.content[0].text == "result"
 
-        # Station should have one docked payload
+        # Station should have one docked shuttle
         assert station._cache is not None
         assert len(station._cache.keys()) == 1
 
-        # Get the stored payload
+        # Shuttle at station carries the full payload
         tool_call_ids = list(station._cache.keys())
-        stored_payload = await station.get_payload(tool_call_ids[0])
+        docked_shuttle = await station.get_payload(tool_call_ids[0])
 
-        assert stored_payload == {"content": result_content}
+        assert isinstance(docked_shuttle, Shuttle)
+        assert docked_shuttle.payload == {"content": result_content}
 
     @pytest.mark.asyncio
     async def test_session_interceptor_masks_content(self) -> None:

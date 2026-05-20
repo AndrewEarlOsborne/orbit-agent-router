@@ -18,10 +18,11 @@ Orbit is a lightweight, python-native solution that can leverage a local cache o
 
 ### Terminology
 - **Payload/Artifact**: Synonymous terms describing the full data dump returned from an LLM agent's tool call
-- **Launchpad**: Configurable component on the agent's surface that launches tools as shuttles, intercepting their payloads. Custom Launchpads implement domain-specific summarization logic.
-- **Shuttle**: A tool launched by a Launchpad. Shuttles have identical interfaces to the original tools but intercept results — ferrying full payloads to a Station and returning a manifest to the LLM.
-- **Station**: Storage backend (cache or database) where full payloads dock after interception
-- **Manifest**: The summarized/masked version of a payload returned to the LLM
+- **Launchpad**: Configurable component on the agent's surface that wraps tools and manages payload interception. Custom Launchpads implement domain-specific manifest generation.
+- **Orbit Wrapped Tool**: A tool wrapped by a Launchpad. Has an identical interface to the original tool but intercepts results at execution time.
+- **Shuttle**: The data payload as it exists inside the orbit system — the full tool result plus metadata (tool_call_id, tool_name) traveling from the Launchpad to a Station.
+- **Station**: Storage backend (cache or database) where Shuttles dock and are stored
+- **Manifest**: The summarized/masked version of a payload returned to the LLM instead of the full Shuttle
 
 ## Local Cache Quickstart
 1. Import Orbit
@@ -33,7 +34,7 @@ from orbit import StationCache, Launchpad
 3. Attach an orbit Launchpad to tool calls in your client (like an MCP client or langgraph toolnode)
 
 ### MCP Client
-Launch tools as shuttles on discovery
+Wrap tools as Orbit Wrapped Tools on discovery
 ```{python}
 async def connect_to_server(self, server_script_path: str):
     """Connect to an MCP server
@@ -57,7 +58,7 @@ async def connect_to_server(self, server_script_path: str):
     response = await self.session.list_tools()
     tools = response.tools
 
-    # Launch tools as orbit shuttles
+    # Wrap tools as Orbit Wrapped Tools
     default_launchpad = Launchpad()
     orbit_tools = []
 
@@ -96,7 +97,7 @@ Orbit intercepts all data artifacts from MCP tools for the MCP Client type.
 
 
 ### For LangChain Toolnode
-1. Launch existing tools as shuttles via the Launchpad
+1. Wrap existing tools as Orbit Wrapped Tools via the Launchpad
 ```{python}
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
@@ -107,7 +108,7 @@ def multiply(a: int, b: int) -> int:
     """Multiply two numbers."""
     return a * b
 
-# Launch tools as orbit shuttles
+# Wrap tools as Orbit Wrapped Tools
 default_launchpad = Launchpad()
 orbit_tools = []
 
@@ -238,10 +239,11 @@ orbit/
 ├── launchpad.py       # Base Launchpad class and default implementation
 ├── launchpads/        # Domain-specific Launchpad subclasses
 │   └── duckdb_launchpad.py
+├── shuttle.py         # Shuttle dataclass — payload + metadata in transit
 ├── station.py         # StationCache and StationDB classes
-├── shuttles/          # Shuttle classes per agent framework
-│   ├── mcp_shuttle.py
-│   └── langchain_shuttle.py
+├── wrappers/          # Orbit Wrapped Tool classes per agent framework
+│   ├── mcp_wrapper.py
+│   └── langchain_wrapper.py
 └── protocols.py       # Type definitions and protocols
 ```
 

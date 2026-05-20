@@ -25,10 +25,11 @@ The launched shuttles will then change the execution time behavior of the tool b
 
 ## Naming Conventions
 
-- **Launchpad**: The component on the agent's surface that launches shuttles and manages payload interception. Customizable per domain (e.g. DuckDBLaunchpad).
-- **Shuttle**: A tool that has been launched by a Launchpad. Shuttles ferry data payloads from the agent's surface to a Station in orbit. They have identical interfaces to the original tools but intercept results.
-- **Station**: Storage backend (cache or database) where full payloads dock after being intercepted by a shuttle.
-- **Payload/Artifact**: Synonymous terms for the full data dump returned from a tool call, stored at the station.
+- **Launchpad**: The component on the agent's surface that wraps tools and manages payload interception. Customizable per domain (e.g. DuckDBLaunchpad).
+- **Orbit Wrapped Tool**: A tool wrapped by a Launchpad. Has an identical interface to the original tool but intercepts results at execution time.
+- **Shuttle**: The data payload as it exists inside the orbit system — the full tool result plus metadata (tool_call_id, tool_name) traveling from the Launchpad to a Station.
+- **Station**: Storage backend (cache or database) where Shuttles dock and are stored.
+- **Payload/Artifact**: Synonymous terms for the full data dump returned from a tool call, carried inside a Shuttle.
 - **Manifest**: The summarized/masked version of a payload returned to the LLM instead of the full payload.
 
 

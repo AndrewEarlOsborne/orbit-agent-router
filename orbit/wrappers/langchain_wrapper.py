@@ -1,4 +1,4 @@
-"""LangChain shuttle functionality"""
+"""LangChain tool wrapping functionality — produces Orbit Wrapped Tools for LangChain"""
 
 from typing import TYPE_CHECKING, Any, Dict, Union
 import logging
@@ -10,16 +10,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class LangChainShuttle:
-    """Shuttle for LangChain tools that intercepts results and ferries payloads to the station"""
+class LangChainToolWrapper:
+    """Orbit Wrapped Tool for LangChain — intercepts results and sends shuttles to the station"""
 
     def __init__(self, original_tool: Any, launchpad: "Launchpad") -> None:
         """
-        Initialize LangChain shuttle
+        Initialize LangChain tool wrapper
 
         Args:
             original_tool: Original LangChain tool object
-            launchpad: Launchpad instance that launched this shuttle
+            launchpad: Launchpad instance for interception
         """
         self._original_tool = original_tool
         self._launchpad = launchpad
@@ -29,7 +29,7 @@ class LangChainShuttle:
         self.args_schema = getattr(original_tool, "args_schema", None)
         self.return_direct = getattr(original_tool, "return_direct", False)
 
-        logger.debug("Created LangChainShuttle for tool: %s", self.name)
+        logger.debug("Created LangChainToolWrapper for tool: %s", self.name)
 
     async def _arun(self, *args: Any, **kwargs: Any) -> Any:
         """
@@ -44,7 +44,7 @@ class LangChainShuttle:
         """
         tool_call_id = str(uuid.uuid4())
         logger.debug(
-            "Executing LangChain shuttle '%s' (async) with tool_call_id: %s",
+            "Executing LangChain tool '%s' (async) with tool_call_id: %s",
             self.name,
             tool_call_id,
         )
@@ -82,7 +82,7 @@ class LangChainShuttle:
         """
         tool_call_id = str(uuid.uuid4())
         logger.debug(
-            "Executing LangChain shuttle '%s' (sync) with tool_call_id: %s",
+            "Executing LangChain tool '%s' (sync) with tool_call_id: %s",
             self.name,
             tool_call_id,
         )
@@ -123,7 +123,7 @@ class LangChainShuttle:
 
     def _wrap_langchain_result(self, result: Any) -> Dict[str, Any]:
         """
-        Wrap LangChain result into standard format for station storage
+        Wrap LangChain result into standard shuttle format
 
         LangChain tools typically return strings or simple objects,
         so we wrap them in a content structure.
@@ -203,16 +203,20 @@ class LangChainShuttle:
         return self._run(input)
 
 
-def launch_langchain_shuttle(tool: Any, launchpad: "Launchpad") -> Any:
+def wrap_langchain_tool(tool: Any, launchpad: "Launchpad") -> Any:
     """
-    Launch a LangChain tool as a shuttle, intercepting results before they reach the agent
+    Wrap a LangChain tool into an Orbit Wrapped Tool
+
+    The wrapped tool intercepts results after execution: the full payload is
+    packaged as a shuttle and stored at the station; a manifest is returned
+    to the agent.
 
     Args:
-        tool: LangChain tool to launch as a shuttle
-        launchpad: Launchpad instance that will manage interception
+        tool: LangChain tool to wrap
+        launchpad: Launchpad instance for interception
 
     Returns:
-        LangChainShuttle wrapping the original tool
+        LangChainToolWrapper (Orbit Wrapped Tool)
 
     Example:
         ```python
@@ -225,17 +229,17 @@ def launch_langchain_shuttle(tool: Any, launchpad: "Launchpad") -> Any:
             return "result"
 
         launchpad = Launchpad(StationCache())
-        shuttle = launch_langchain_shuttle(my_tool, launchpad)
+        orbit_tool = wrap_langchain_tool(my_tool, launchpad)
         ```
     """
-    return LangChainShuttle(tool, launchpad)
+    return LangChainToolWrapper(tool, launchpad)
 
 
 class LangChainToolNodeInterceptor:
     """
-    Session-level interceptor for LangGraph ToolNode
+    Interceptor for LangGraph ToolNode
 
-    Intercepts at the ToolNode level by launching all contained tools as shuttles.
+    Wraps all tools in a ToolNode as Orbit Wrapped Tools.
     """
 
     def __init__(self, tool_node: Any, launchpad: "Launchpad") -> None:
@@ -252,18 +256,18 @@ class LangChainToolNodeInterceptor:
         logger.info("LangChainToolNodeInterceptor initialized")
 
     def wrap_tools(self) -> None:
-        """Launch all tools in the ToolNode as shuttles"""
+        """Wrap all tools in the ToolNode as Orbit Wrapped Tools"""
         if hasattr(self._tool_node, "tools"):
-            shuttles = [
-                launch_langchain_shuttle(tool, self._launchpad) for tool in self._tool_node.tools
+            wrapped_tools = [
+                wrap_langchain_tool(tool, self._launchpad) for tool in self._tool_node.tools
             ]
-            self._tool_node.tools = shuttles
-            logger.info("Launched %d shuttles in ToolNode", len(shuttles))
+            self._tool_node.tools = wrapped_tools
+            logger.info("Wrapped %d tools in ToolNode", len(wrapped_tools))
 
 
 def intercept_tool_node(tool_node: Any, launchpad: "Launchpad") -> None:
     """
-    Intercept a LangGraph ToolNode by launching its tools as shuttles
+    Intercept a LangGraph ToolNode by wrapping its tools as Orbit Wrapped Tools
 
     Args:
         tool_node: LangGraph ToolNode instance
@@ -273,15 +277,13 @@ def intercept_tool_node(tool_node: Any, launchpad: "Launchpad") -> None:
         ```python
         from langgraph.prebuilt import ToolNode
         from orbit import Launchpad, StationCache
-        from orbit.shuttles.langchain_shuttle import intercept_tool_node
+        from orbit.wrappers.langchain_wrapper import intercept_tool_node
 
         tools = [tool1, tool2, tool3]
         tool_node = ToolNode(tools)
 
         launchpad = Launchpad(StationCache())
         intercept_tool_node(tool_node, launchpad)
-
-        # Now all tools in tool_node are launched as shuttles
         ```
     """
     interceptor = LangChainToolNodeInterceptor(tool_node, launchpad)

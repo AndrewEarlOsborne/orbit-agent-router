@@ -1,7 +1,7 @@
 """Test suite for Launchpad masking and summarization"""
 
 import pytest
-from orbit import DefaultLaunchpad, Launchpad, StationCache
+from orbit import DefaultLaunchpad, Launchpad, StationCache, Shuttle
 from orbit.protocols import MCPToolResult
 
 
@@ -66,10 +66,12 @@ class TestDefaultLaunchpad:
 
         await launchpad._process_result("id-1", "test_tool", result)
 
-        # Original should be stored
+        # Shuttle should be docked at station with full payload
         stored = await station.get_payload("id-1")
-        assert stored == result
-        assert stored["content"][0]["text"] == long_text
+        assert isinstance(stored, Shuttle)
+        assert stored.tool_call_id == "id-1"
+        assert stored.tool_name == "test_tool"
+        assert stored.payload["content"][0]["text"] == long_text
 
     @pytest.mark.asyncio
     async def test_mask_nested_dict(self) -> None:
@@ -265,6 +267,7 @@ class TestCustomLaunchpad:
 
         assert intercepted["content"][0]["text"] == "[REDACTED by test_tool]"
 
-        # Original should still be stored
+        # Shuttle should still be docked with original payload
         stored = await station.get_payload("id-1")
-        assert stored["content"][0]["text"] == "sensitive data"
+        assert isinstance(stored, Shuttle)
+        assert stored.payload["content"][0]["text"] == "sensitive data"

@@ -7,6 +7,7 @@ with robust customizability, masking for sensitive information, and data routing
 
 from orbit.launchpad import Launchpad, DefaultLaunchpad
 from orbit.station import Station, StationCache, StationDB
+from orbit.shuttle import Shuttle
 from orbit.protocols import (
     ToolProtocol,
     MCPToolProtocol,
@@ -16,13 +17,13 @@ from orbit.protocols import (
     DataContent,
     ResourceContent,
 )
-from orbit.shuttles.mcp_shuttle import (
-    launch_mcp_shuttle,
+from orbit.wrappers.mcp_wrapper import (
+    wrap_mcp_tool,
     MCPClientInterceptor,
     intercept_mcp_session,
 )
-from orbit.shuttles.langchain_shuttle import (
-    launch_langchain_shuttle,
+from orbit.wrappers.langchain_wrapper import (
+    wrap_langchain_tool,
     LangChainToolNodeInterceptor,
     intercept_tool_node,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "Station",
     "StationCache",
     "StationDB",
+    "Shuttle",
     # Type protocols
     "ToolProtocol",
     "MCPToolProtocol",
@@ -50,12 +52,12 @@ __all__ = [
     "TextContent",
     "DataContent",
     "ResourceContent",
-    # MCP shuttles
-    "launch_mcp_shuttle",
+    # MCP wrappers
+    "wrap_mcp_tool",
     "MCPClientInterceptor",
     "intercept_mcp_session",
-    # LangChain shuttles
-    "launch_langchain_shuttle",
+    # LangChain wrappers
+    "wrap_langchain_tool",
     "LangChainToolNodeInterceptor",
     "intercept_tool_node",
     # Transformations framework
