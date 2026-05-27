@@ -2,7 +2,7 @@
 
 import inspect
 import functools
-from typing import Any, Callable, Dict, Optional, Type
+from typing import Any, Callable, Dict, Optional, Type, cast
 from pydantic import BaseModel, create_model
 import logging
 
@@ -16,7 +16,7 @@ def orbit_transformation_tool_mcp(
     data_type: DataType,
     description: str,
     transform_config: Optional[Type[BaseModel]] = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator for defining a transformation tool in Orbit
 
@@ -61,7 +61,7 @@ def orbit_transformation_tool_mcp(
         ```
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Extract function signature
         sig = inspect.signature(func)
         func_name = func.__name__
@@ -91,6 +91,7 @@ def orbit_transformation_tool_mcp(
         )
 
         # Create wrapper that handles Station integration
+        wrapper: Any
         if is_async:
 
             @functools.wraps(func)
@@ -159,7 +160,7 @@ def orbit_transformation_tool_mcp(
                     ctx.execution_id,
                 )
 
-                return result
+                return cast(Dict[str, Any], result)
 
             wrapper = async_wrapper
 
@@ -230,7 +231,7 @@ def orbit_transformation_tool_mcp(
                     ctx.execution_id,
                 )
 
-                return result
+                return cast(Dict[str, Any], result)
 
             wrapper = sync_wrapper
 
@@ -241,7 +242,7 @@ def orbit_transformation_tool_mcp(
         wrapper._orbit_config = config
         wrapper._orbit_parameters = params_schema
 
-        return wrapper
+        return cast(Callable[..., Any], wrapper)
 
     return decorator
 
@@ -281,7 +282,7 @@ def _generate_config_from_signature(sig: inspect.Signature) -> Optional[Type[Bas
     if not fields:
         return None
 
-    return create_model("GeneratedTransformConfig", **fields)
+    return create_model("GeneratedTransformConfig", **cast(Any, fields))
 
 
 def _extract_schema(config: Type[BaseModel]) -> Dict[str, Any]:

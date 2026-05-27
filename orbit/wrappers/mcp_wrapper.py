@@ -1,6 +1,6 @@
 """MCP tool wrapping functionality — produces Orbit Wrapped Tools for MCP"""
 
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, cast
 import logging
 import uuid
 
@@ -147,7 +147,7 @@ class MCPClientInterceptor:
                 else:
                     content_dicts.append(item if isinstance(item, dict) else {"data": item})
             return {"content": content_dicts}
-        return result
+        return cast(Dict[str, Any], result)
 
     def _unwrap_mcp_result(self, intercepted_result: Any, original_result: Any) -> Any:
         """
@@ -193,7 +193,9 @@ class MCPClientInterceptor:
                                         f"Expected dict for 'resource', got {type(resource).__name__}"
                                     )
                                 new_content.append(
-                                    types.EmbeddedResource(type="resource", resource=resource)
+                                    types.EmbeddedResource(
+                                        type="resource", resource=cast(Any, resource)
+                                    )
                                 )
                             else:
                                 # Unknown content type: preserve as text to avoid silent data loss

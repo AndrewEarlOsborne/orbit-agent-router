@@ -6,10 +6,10 @@ from pathlib import Path
 from mcp import types
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.session import ClientSession
+from mcp.types import TextContent
 
-from orbit import DefaultLaunchpad, StationCache
-from orbit.wrappers.mcp_wrapper import intercept_mcp_session
-from orbit.wrappers.mcp_wrapper import MCPClientInterceptor
+from orbit import DefaultLaunchpad, StationCache, Shuttle
+from orbit.wrappers.mcp_wrapper import intercept_mcp_session, MCPClientInterceptor
 
 
 @pytest.fixture
@@ -120,12 +120,13 @@ class TestRealMCPIntegration:
                 stored = await station.get_payload(tool_call_ids[0])
 
                 assert stored is not None
-                assert isinstance(stored, dict)
-                assert len(stored["content"]) == 2
-                assert stored["content"][0]["text"] == "Query: test query"
-                assert len(stored["content"][1]["text"]) == 3000
+                assert isinstance(stored, Shuttle)
+                assert len(stored.payload["content"]) == 2
+                assert stored.payload["content"][0]["text"] == "Query: test query"
+                assert len(stored.payload["content"][1]["text"]) == 3000
 
                 assert isinstance(result, types.CallToolResult)
+                assert isinstance(result.content[0], TextContent)
                 assert result.content[0].text == "Query: test query"
 
     @pytest.mark.asyncio
@@ -153,8 +154,10 @@ class TestRealMCPIntegration:
                 stored1 = await station.get_payload(tool_call_ids[0])
                 stored2 = await station.get_payload(tool_call_ids[1])
 
-                assert stored1["content"][0]["text"] == "Query: first"
-                assert stored2["content"][0]["text"] == "Small result for: second"
+                assert stored1 is not None
+                assert stored2 is not None
+                assert stored1.payload["content"][0]["text"] == "Query: first"
+                assert stored2.payload["content"][0]["text"] == "Small result for: second"
 
     @pytest.mark.asyncio
     async def test_interceptor_disable_with_real_server(self, mcp_server_script: Path) -> None:
@@ -181,6 +184,7 @@ class TestRealMCPIntegration:
                 result2 = await session.call_tool("fetch_large_data", {"query": "test2"})
 
                 assert len(station._cache.keys()) == 1
+                assert isinstance(result2.content[1], TextContent)
                 assert len(result2.content[1].text) == 3000
 
     @pytest.mark.asyncio
@@ -213,11 +217,10 @@ class TestRealMCPIntegration:
                 assert isinstance(result, types.CallToolResult)
                 llm_visible_content = result.content[1]
 
-                if isinstance(stored_full_data, dict):
-                    assert stored_full_data["content"][1]["text"] == "x" * 3000
-                else:
-                    assert stored_full_data.content[1].text == "x" * 3000
+                assert isinstance(stored_full_data, Shuttle)
+                assert stored_full_data.payload["content"][1]["text"] == "x" * 3000
 
+                assert isinstance(llm_visible_content, TextContent)
                 assert isinstance(llm_visible_content.text, (dict, str))
                 if isinstance(llm_visible_content.text, str):
                     assert llm_visible_content.text != "x" * 3000

@@ -124,15 +124,14 @@ async def filter_sql(
             duckdb.connect(resource_uri, read_only=True)
             .execute("SELECT COUNT(*) FROM result")
             .fetchone()[0]
-        )  # type: ignore[index]
-
+        )
         if in_place:
             con = duckdb.connect(resource_uri)
             try:
                 con.execute(f"CREATE TEMP TABLE _tmp AS SELECT * FROM result WHERE {where_clause}")
                 con.execute("DELETE FROM result")
                 con.execute("INSERT INTO result SELECT * FROM _tmp")
-                filtered_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]  # type: ignore[index]
+                filtered_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]
             finally:
                 con.close()
         else:
@@ -143,7 +142,7 @@ async def filter_sql(
                 con.execute(
                     f"CREATE TABLE dst.result AS SELECT * FROM src.result WHERE {where_clause}"
                 )
-                filtered_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]  # type: ignore[index]
+                filtered_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]
             finally:
                 con.close()
             _copy_descriptor(resource_uri, out_path, {"row_count": str(filtered_count)})
@@ -211,7 +210,7 @@ async def aggregate_sql(
                 )
                 con.execute("DROP TABLE result")
                 con.execute("CREATE TABLE result AS SELECT * FROM _tmp")
-                group_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]  # type: ignore[index]
+                group_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]
             finally:
                 con.close()
         else:
@@ -223,7 +222,7 @@ async def aggregate_sql(
                     f"CREATE TABLE dst.result AS "
                     f"SELECT {select_expr} FROM src.result GROUP BY {group_expr}"
                 )
-                group_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]  # type: ignore[index]
+                group_count = con.execute("SELECT COUNT(*) FROM dst.result").fetchone()[0]
             finally:
                 con.close()
             new_cols = json.dumps(group_cols + [agg_alias])
@@ -288,7 +287,7 @@ async def export_sql(
 
         con = duckdb.connect(resource_uri, read_only=True)
         try:
-            row_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]  # type: ignore[index]
+            row_count = con.execute("SELECT COUNT(*) FROM result").fetchone()[0]
             con.execute(f"COPY result TO '{output_path}' (FORMAT {duckdb_format}{header_opt})")
         finally:
             con.close()
@@ -334,7 +333,7 @@ async def reconnect_and_query(
         pip install orbit[sql] <db-driver>
     """
     try:
-        import sqlalchemy as sa
+        import sqlalchemy as sa  # type: ignore[import-not-found]
     except ImportError:
         return {
             "type": "text",

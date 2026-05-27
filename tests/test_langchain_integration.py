@@ -5,7 +5,7 @@ from typing import Any, Dict
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode
 
-from orbit import DefaultLaunchpad, StationCache
+from orbit import DefaultLaunchpad, StationCache, Shuttle
 from orbit.wrappers.langchain_wrapper import wrap_langchain_tool, intercept_tool_node
 
 
@@ -48,8 +48,8 @@ class TestRealLangChainIntegration:
         stored = await station.get_payload(tool_call_ids[0])
 
         assert stored is not None
-        assert "content" in stored
-        full_text = stored["content"][0]["text"]
+        assert isinstance(stored, Shuttle)
+        full_text = stored.payload["content"][0]["text"]
         assert "Results for 'test search':" in full_text
         assert "x" * 3000 in full_text
 
@@ -73,7 +73,8 @@ class TestRealLangChainIntegration:
         stored = await station.get_payload(tool_call_ids[0])
 
         assert stored is not None
-        full_data = stored["content"][0]["data"]
+        assert isinstance(stored, Shuttle)
+        full_data = stored.payload["content"][0]["data"]
         assert full_data["endpoint"] == "/api/data"
         assert full_data["data"] == "y" * 3000
         assert full_data["status"] == "success"
@@ -97,7 +98,8 @@ class TestRealLangChainIntegration:
         tool_call_ids = list(station._cache.keys())
         stored = await station.get_payload(tool_call_ids[0])
 
-        assert stored["content"][0]["text"] == "Info for config: small value"
+        assert isinstance(stored, Shuttle)
+        assert stored.payload["content"][0]["text"] == "Info for config: small value"
 
         assert result == "Info for config: small value"
 
@@ -165,9 +167,12 @@ class TestRealLangChainIntegration:
         stored2 = await station.get_payload(tool_call_ids[1])
         stored3 = await station.get_payload(tool_call_ids[2])
 
-        assert "first" in stored1["content"][0]["text"]
-        assert "second" in stored2["content"][0]["text"]
-        assert stored3["content"][0]["data"]["endpoint"] == "/third"
+        assert stored1 is not None
+        assert stored2 is not None
+        assert stored3 is not None
+        assert "first" in stored1.payload["content"][0]["text"]
+        assert "second" in stored2.payload["content"][0]["text"]
+        assert stored3.payload["content"][0]["data"]["endpoint"] == "/third"
 
     @pytest.mark.asyncio
     async def test_data_masking_verification(self) -> None:
@@ -186,7 +191,8 @@ class TestRealLangChainIntegration:
         tool_call_id = tool_call_ids[0]
         full_cached_data = await station.get_payload(tool_call_id)
 
-        assert "x" * 3000 in full_cached_data["content"][0]["text"]
+        assert isinstance(full_cached_data, Shuttle)
+        assert "x" * 3000 in full_cached_data.payload["content"][0]["text"]
 
         assert "x" * 3000 not in llm_result
 

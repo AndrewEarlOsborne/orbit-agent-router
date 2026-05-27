@@ -3,7 +3,7 @@
 import csv
 import os
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from pydantic import BaseModel
 
 from orbit.transformations.decorators import orbit_transformation_tool_mcp
@@ -321,7 +321,7 @@ async def group_by_csv(
         if agg_func not in agg_map:
             return {"type": "text", "text": f"Error: Unknown agg_func: {agg_func}"}
 
-        groups: Dict[tuple, List[float]] = defaultdict(list)
+        groups: Dict[Tuple[Any, ...], List[float]] = defaultdict(list)
         for row in rows:
             key = tuple(row.get(col, "") for col in group_cols)
             try:
@@ -331,7 +331,7 @@ async def group_by_csv(
 
         result_fieldnames = group_cols + [f"{agg_func}_{agg_col}"]
         result_rows = [
-            {**dict(zip(group_cols, key)), f"{agg_func}_{agg_col}": agg_map[agg_func](vals)}
+            {**dict(zip(group_cols, key)), f"{agg_func}_{agg_col}": agg_map[agg_func](vals)}  # type: ignore[no-untyped-call]
             for key, vals in groups.items()
         ]
 

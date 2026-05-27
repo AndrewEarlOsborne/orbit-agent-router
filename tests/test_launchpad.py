@@ -1,6 +1,7 @@
 """Test suite for Launchpad masking and summarization"""
 
 import pytest
+from typing import Any, Dict, List
 from orbit import DefaultLaunchpad, Launchpad, StationCache, Shuttle
 from orbit.protocols import MCPToolResult
 
@@ -139,7 +140,7 @@ class TestDefaultLaunchpad:
         station = StationCache()
         launchpad = DefaultLaunchpad(station=station)
 
-        valid_result = {"content": []}
+        valid_result: Dict[str, Any] = {"content": []}
         assert launchpad._validate_result(valid_result) is True
 
         invalid_result = {"data": "no content key"}
@@ -248,7 +249,9 @@ class TestCustomLaunchpad:
         class CustomLaunchpad(Launchpad):
             """Custom launchpad that replaces all text with placeholder"""
 
-            def _generate_summary(self, tool_call_id, tool_name, content):
+            def _generate_summary(
+                self, tool_call_id: str, tool_name: str, content: List[Dict[str, Any]]
+            ) -> List[Dict[str, Any]]:
                 summary_content = []
                 for item in content:
                     if item.get("type") == "text":

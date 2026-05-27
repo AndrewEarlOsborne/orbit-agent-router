@@ -1,6 +1,6 @@
 """Launchpad classes for wrapping tools and routing payload shuttles to the station"""
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, cast
 from abc import ABC, abstractmethod
 import logging
 import copy
@@ -16,13 +16,6 @@ class Launchpad(ABC):
     """Base class for payload interceptors and summarizers"""
 
     def __init__(self, station: Union[Station, None] = None) -> None:
-        """
-        Initialize Launchpad with a storage backend
-
-        Args:
-            station: Storage backend (StationCache or StationDB) for full payloads.
-                     If None, creates a default StationCache.
-        """
         self.station = station if station is not None else StationCache()
         logger.info("Launchpad initialized with station: %s", type(self.station).__name__)
 
@@ -34,12 +27,6 @@ class Launchpad(ABC):
         intercepts results: the full payload is packaged as a Shuttle and
         stored at the Station; a manifest is returned to the agent.
 
-        Args:
-            tool: Tool object (MCP tool, LangChain tool, etc.)
-
-        Returns:
-            Orbit Wrapped Tool with identical signature but intercepted execution
-
         Raises:
             TypeError: If tool type is not supported
         """
@@ -47,12 +34,12 @@ class Launchpad(ABC):
             logger.debug("Wrapping MCP tool: %s", tool.name)
             from orbit.wrappers.mcp_wrapper import wrap_mcp_tool
 
-            return wrap_mcp_tool(tool, self)
+            return cast(ToolProtocol, wrap_mcp_tool(tool, self))
         elif isinstance(tool, LangChainToolProtocol):
             logger.debug("Wrapping LangChain tool: %s", tool.name)
             from orbit.wrappers.langchain_wrapper import wrap_langchain_tool
 
-            return wrap_langchain_tool(tool, self)
+            return cast(ToolProtocol, wrap_langchain_tool(tool, self))
         else:
             raise TypeError(
                 f"Unsupported tool type: {type(tool)}. "
@@ -64,32 +51,17 @@ class Launchpad(ABC):
         self, tool_call_id: str, tool_name: str, content: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
-        Generate summary/masked version of tool result content
+        Generate summarized/masked version of tool result content.
 
-        This method should be overridden in custom Launchpad implementations
-        to provide domain-specific summarization logic.
-
-        Args:
-            tool_call_id: Unique identifier for this tool call
-            tool_name: Name of the tool that was called
-            content: List of content objects from tool result
-
-        Returns:
-            List of summarized/masked content objects
+        Override in custom Launchpad subclasses to implement domain-specific
+        summarization. Receives the full content list; returns the manifest
+        content list that will be seen by the agent.
         """
         pass
 
     async def _process_result(self, tool_call_id: str, tool_name: str, result: Any) -> Any:
         """
-        Internal method to intercept and process tool results
-
-        Args:
-            tool_call_id: Unique identifier for this tool call
-            tool_name: Name of the tool that was called
-            result: Raw result from tool execution
-
-        Returns:
-            Modified result with summarized content
+        Intercept a tool result: store a Shuttle at the station and return a manifest.
 
         Raises:
             ValueError: If result is not a valid tool message
@@ -102,7 +74,7 @@ class Launchpad(ABC):
             raise ValueError(f"Invalid tool result for tool_call_id: {tool_call_id}")
 
         original_result = copy.deepcopy(result)
-        content = self._extract_content(result)
+        content = self._extract_content(original_result)
 
         shuttle = Shuttle(
             tool_call_id=tool_call_id,
@@ -116,64 +88,25 @@ class Launchpad(ABC):
         summary_content = self._generate_summary(tool_call_id, tool_name, content)
         logger.debug("Generated summary for tool_call_id: %s", tool_call_id)
 
-        modified_result = self._replace_content(result, summary_content)
-
-        return modified_result
+        return self._replace_content(result, summary_content)
 
     def _validate_result(self, result: Any) -> bool:
-        """
-        Validate that result is a valid tool message
-
-        Args:
-            result: Result to validate
-
-        Returns:
-            True if valid, False otherwise
-        """
         if result is None:
             return False
-
         if isinstance(result, dict):
             return "content" in result
-
-        if hasattr(result, "content"):
-            return True
-
-        return False
+        return hasattr(result, "content")
 
     def _extract_content(self, result: Any) -> List[Dict[str, Any]]:
-        """
-        Extract content list from result
-
-        Args:
-            result: Tool result
-
-        Returns:
-            List of content dictionaries
-        """
         if isinstance(result, dict):
             content = result.get("content", [])
         elif hasattr(result, "content"):
             content = result.content
         else:
             content = []
-
-        if not isinstance(content, list):
-            content = [content]
-
-        return content
+        return content if isinstance(content, list) else [content]
 
     def _replace_content(self, result: Any, new_content: List[Dict[str, Any]]) -> Any:
-        """
-        Replace content in result with new content
-
-        Args:
-            result: Original result
-            new_content: New content to insert
-
-        Returns:
-            Result with replaced content
-        """
         if isinstance(result, dict):
             modified = copy.copy(result)
             modified["content"] = new_content
@@ -189,13 +122,6 @@ class DefaultLaunchpad(Launchpad):
     """Default implementation with 2048-character masking threshold"""
 
     def __init__(self, station: Union[Station, None] = None, threshold: int = 2048) -> None:
-        """
-        Initialize DefaultLaunchpad
-
-        Args:
-            station: Storage backend for full payloads
-            threshold: Character threshold for masking (default: 2048)
-        """
         super().__init__(station)
         self.threshold = threshold
         logger.info("DefaultLaunchpad initialized with threshold: %d", threshold)
@@ -203,120 +129,42 @@ class DefaultLaunchpad(Launchpad):
     def _generate_summary(
         self, tool_call_id: str, tool_name: str, content: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """
-        Default summary: mask any string values exceeding threshold chars
-
-        Returns metadata about masked content including type and length.
-
-        Args:
-            tool_call_id: Unique identifier for this tool call
-            tool_name: Name of the tool that was called
-            content: List of content objects from tool result
-
-        Returns:
-            List of summarized/masked content objects
-        """
+        """Mask any string values exceeding threshold chars; preserve everything else."""
         summary_content: List[Dict[str, Any]] = []
-
         for item in content:
             if not isinstance(item, dict):
                 summary_content.append(item)
                 continue
-
             item_type = item.get("type", "unknown")
-            masked_item = self._mask_item(item, item_type)
-            summary_content.append(masked_item)
-
+            summary_content.append(self._mask_item(item, item_type))
         return summary_content
 
+    def _mask_value(self, value: Any) -> Any:
+        """Recursively mask a value — returns mask dict, masked container, or original."""
+        if isinstance(value, str) and len(value) > self.threshold:
+            return {
+                "original_type": "string",
+                "length": len(value),
+                "summary": f"Content masked - exceeds {self.threshold} chars",
+                "preview": value[: min(100, len(value))] + "...",
+            }
+        if isinstance(value, dict):
+            return {k: self._mask_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._mask_value(item) for item in value]
+        return value
+
     def _mask_item(self, item: Dict[str, Any], item_type: str) -> Dict[str, Any]:
-        """
-        Mask a single content item if it exceeds threshold
-
-        Args:
-            item: Content item to potentially mask
-            item_type: Type of the content item
-
-        Returns:
-            Masked or original item
-        """
-        masked_item = copy.copy(item)
-
+        """Mask a single MCP content item, preserving the top-level 'type' key."""
+        masked_item: Dict[str, Any] = {}
         for key, value in item.items():
             if key == "type":
+                masked_item[key] = value
                 continue
-
+            masked_val = self._mask_value(value)
             if isinstance(value, str) and len(value) > self.threshold:
-                masked_item[key] = {
-                    "original_type": "string",
-                    "length": len(value),
-                    "summary": f"Content masked - exceeds {self.threshold} chars",
-                    "preview": value[: min(100, len(value))] + "...",
-                }
                 logger.debug(
                     "Masked field '%s' in item type '%s' (length: %d)", key, item_type, len(value)
                 )
-
-            elif isinstance(value, dict):
-                masked_item[key] = self._mask_dict(value)
-
-            elif isinstance(value, list):
-                masked_item[key] = self._mask_list(value)
-
+            masked_item[key] = masked_val
         return masked_item
-
-    def _mask_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Recursively mask dictionary values
-
-        Args:
-            data: Dictionary to mask
-
-        Returns:
-            Masked dictionary
-        """
-        masked = {}
-        for key, value in data.items():
-            if isinstance(value, str) and len(value) > self.threshold:
-                masked[key] = {
-                    "original_type": "string",
-                    "length": len(value),
-                    "summary": f"Content masked - exceeds {self.threshold} chars",
-                    "preview": value[: min(100, len(value))] + "...",
-                }
-            elif isinstance(value, dict):
-                masked[key] = self._mask_dict(value)
-            elif isinstance(value, list):
-                masked[key] = self._mask_list(value)
-            else:
-                masked[key] = value
-        return masked
-
-    def _mask_list(self, data: List[Any]) -> List[Any]:
-        """
-        Recursively mask list items
-
-        Args:
-            data: List to mask
-
-        Returns:
-            Masked list
-        """
-        masked = []
-        for item in data:
-            if isinstance(item, str) and len(item) > self.threshold:
-                masked.append(
-                    {
-                        "original_type": "string",
-                        "length": len(item),
-                        "summary": f"Content masked - exceeds {self.threshold} chars",
-                        "preview": item[: min(100, len(item))] + "...",
-                    }
-                )
-            elif isinstance(item, dict):
-                masked.append(self._mask_dict(item))
-            elif isinstance(item, list):
-                masked.append(self._mask_list(item))
-            else:
-                masked.append(item)
-        return masked

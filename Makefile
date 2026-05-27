@@ -55,7 +55,7 @@ typecheck:
 	@echo "Type checking with mypy..."
 	$(PYTHON) -m mypy $(PACKAGE_DIR)
 	@echo "Type checking tests..."
-	$(PYTHON) -m mypy $(TEST_DIR) --disable-error-code=import-untyped || true
+	$(PYTHON) -m mypy $(TEST_DIR) --disable-error-code=import-untyped --no-warn-unused-ignores || true
 
 check: format-check lint-check typecheck
 	@echo "All checks passed!"

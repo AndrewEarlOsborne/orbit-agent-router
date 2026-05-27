@@ -4,7 +4,7 @@ import pytest
 from typing import Any, Dict, List
 from orbit import DefaultLaunchpad, StationCache, Shuttle
 from orbit.wrappers.mcp_wrapper import MCPToolWrapper, MCPClientInterceptor
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolResult, ContentBlock, TextContent
 
 
 class MockMCPTool:
@@ -30,7 +30,7 @@ class MockMCPSession:
     async def call_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> CallToolResult:
         """Mock call_tool method that returns MCP CallToolResult-like object"""
 
-        content_objects = []
+        content_objects: List[ContentBlock] = []
         for item in self._result_content:
             if isinstance(item, dict):
                 item_type = item.get("type", "text")
@@ -141,7 +141,7 @@ class TestMCPToolWrapper:
 
         text_length = 1000
 
-        result_content = [
+        result_content: List[Dict[str, Any]] = [
             {"type": "text", "text": "short"},
             {"type": "text", "text": "x" * text_length},  # Long, should be masked
             {"type": "data", "data": {"key": "value"}},
@@ -215,6 +215,7 @@ class TestMCPClientInterceptor:
 
         result = await session.call_tool("test_tool", {"arg": "value"})
 
+        assert isinstance(result.content[0], TextContent)
         assert result.content[0].text == "result"
 
         # Station should have one docked shuttle
@@ -245,4 +246,5 @@ class TestMCPClientInterceptor:
 
         # Result should be masked
         assert isinstance(result.content, list)
+        assert isinstance(result.content[0], TextContent)
         assert "100" in result.content[0].text

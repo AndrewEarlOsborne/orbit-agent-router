@@ -18,7 +18,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from orbit.launchpad import Launchpad
 from orbit.station import Station
@@ -265,7 +265,7 @@ class DuckDBLaunchpad(Launchpad):
     def _extract_text(self, content: List[Dict[str, Any]]) -> Optional[str]:
         for item in content:
             if isinstance(item, dict) and item.get("type") == "text":
-                return item.get("text", "")
+                return cast(Optional[str], item.get("text", ""))
         return None
 
 

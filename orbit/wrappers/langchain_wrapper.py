@@ -103,7 +103,7 @@ class LangChainToolWrapper:
 
         try:
             loop = asyncio.get_running_loop()
-            import nest_asyncio
+            import nest_asyncio  # type: ignore[import-untyped]
 
             nest_asyncio.apply()
             intercepted_result = loop.run_until_complete(

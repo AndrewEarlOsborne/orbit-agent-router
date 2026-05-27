@@ -26,7 +26,7 @@ class TransformationMetadata:
         name: str,
         data_type: DataType,
         description: str,
-        function: Callable,
+        function: Callable[..., Any],
         parameters: Dict[str, Any],
     ) -> None:
         """
@@ -71,7 +71,7 @@ class TransformationRegistry:
         name: str,
         data_type: DataType,
         description: str,
-        function: Callable,
+        function: Callable[..., Any],
         parameters: Dict[str, Any],
     ) -> None:
         """

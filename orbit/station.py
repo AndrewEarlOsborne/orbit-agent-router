@@ -1,6 +1,6 @@
 """Storage backends for Orbit payloads"""
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from abc import ABC, abstractmethod
 import json
 import logging
@@ -39,7 +39,7 @@ class Station(ABC):
 class StationCache(Station):
     """In-memory cache-based storage for development and testing"""
 
-    def __init__(self, cache: Dict[str, Any] = None) -> None:
+    def __init__(self, cache: Optional[Dict[str, Any]] = None) -> None:
         """
         Initialize with optional existing cache
 
@@ -61,7 +61,7 @@ class StationCache(Station):
         self._cache[tool_call_id] = payload
         logger.debug("Stored payload for tool_call_id: %s", tool_call_id)
 
-    async def get_payload(self, tool_call_id: str) -> str:
+    async def get_payload(self, tool_call_id: str) -> Optional[Any]:
         """
         Retrieve payload from cache
 
@@ -162,7 +162,7 @@ class StationDB(Station):
         if self._db is None:
             raise RuntimeError("Database connection not established")
 
-        payload_json = json.dumps(payload)
+        payload_json = json.dumps(payload.to_dict() if hasattr(payload, "to_dict") else payload)
         insert_sql = f"""
         INSERT OR REPLACE INTO {self.table_name} (tool_call_id, payload)
         VALUES (?, ?)
@@ -192,10 +192,10 @@ class StationDB(Station):
         async with self._db.execute(select_sql, (tool_call_id,)) as cursor:
             row = await cursor.fetchone()
             if row is None:
-                logger.exception("No payload found for tool_call_id: %s in database", tool_call_id)
+                logger.debug("No payload found for tool_call_id: %s in database", tool_call_id)
                 return None
             payload = json.loads(row[0])
-            logger.exception("Retrieved payload for tool_call_id: %s from database", tool_call_id)
+            logger.debug("Retrieved payload for tool_call_id: %s from database", tool_call_id)
             return payload
 
     async def close(self) -> None:
